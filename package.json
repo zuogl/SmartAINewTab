@@ -36,7 +36,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "dexie": "^4.4.4",
     "fuse.js": "^7.1.0",
-    "nanoid": "^5.1.5",
+    "nanoid": "^6.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^4.0.17"
