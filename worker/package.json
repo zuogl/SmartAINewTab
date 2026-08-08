@@ -16,7 +16,7 @@
     "db:migrate:local": "wrangler d1 migrations apply smart-new-tab-sync --local"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "wrangler": "^4.114.0"
