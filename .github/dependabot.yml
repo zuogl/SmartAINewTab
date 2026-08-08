@@ -17,6 +17,14 @@ updates:
         update-types:
           - minor
           - patch
+    # Keep updates compatible with the project's current Node 22 development baseline.
+    ignore:
+      - dependency-name: jsdom
+        versions:
+          - ">=30.0.0"
+      - dependency-name: "@icons-pack/react-simple-icons"
+        versions:
+          - ">=13.12.0"
   - package-ecosystem: npm
     directory: /worker
     schedule:
