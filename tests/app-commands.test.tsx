@@ -133,23 +133,23 @@ describe("App natural-language slash commands", () => {
     ]);
     let providerCall = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/v1/backgrounds")) {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/v1/backgrounds")) {
         return Response.json({ backgrounds: [] });
       }
-      if (url.includes("api.open-meteo.com")) {
+      if (url.hostname === "api.open-meteo.com") {
         return Response.json({
           current: { temperature_2m: 25 },
           daily: { time: ["2026-08-03"] },
         });
       }
-      if (url.includes("api.frankfurter.dev")) {
+      if (url.hostname === "api.frankfurter.dev") {
         return Response.json({ date: "2026-08-03", rate: 0.14 });
       }
-      if (url.includes("top.baidu.com")) {
+      if (url.hostname === "top.baidu.com") {
         return Response.json({ data: { cards: [] } });
       }
-      expect(url).toContain("/chat/completions");
+      expect(url.pathname).toContain("/chat/completions");
       providerCall += 1;
       if (providerCall === 1) {
         return Response.json({

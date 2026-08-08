@@ -40,6 +40,53 @@ describe("cloud endpoint defaults", () => {
     });
   });
 
+  it("keeps a preview API key in memory without persisting it to localStorage", async () => {
+    await saveSettings({
+      ...DEFAULT_SETTINGS,
+      provider: {
+        ...DEFAULT_SETTINGS.provider,
+        enabled: true,
+        apiKey: "test-only-preview-key",
+      },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      provider: {
+        enabled: true,
+        apiKey: "test-only-preview-key",
+      },
+    });
+    const persisted = JSON.parse(
+      localStorage.getItem("smart-new-tab:smartNewTab.settings.v1") ?? "{}",
+    ) as { provider?: { apiKey?: string } };
+    expect(persisted.provider?.apiKey).toBe("");
+  });
+
+  it("removes a legacy preview API key from localStorage without losing the current session", async () => {
+    localStorage.setItem(
+      "smart-new-tab:smartNewTab.settings.v1",
+      JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        provider: {
+          ...DEFAULT_SETTINGS.provider,
+          enabled: true,
+          apiKey: "test-only-legacy-key",
+        },
+      }),
+    );
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      provider: {
+        enabled: true,
+        apiKey: "test-only-legacy-key",
+      },
+    });
+    const persisted = JSON.parse(
+      localStorage.getItem("smart-new-tab:smartNewTab.settings.v1") ?? "{}",
+    ) as { provider?: { apiKey?: string } };
+    expect(persisted.provider?.apiKey).toBe("");
+  });
+
   it("adds default screen display preferences to legacy settings", async () => {
     localStorage.setItem(
       "smart-new-tab:smartNewTab.settings.v1",

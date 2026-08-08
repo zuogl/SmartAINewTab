@@ -511,7 +511,7 @@ describe("persistent AI job queue", () => {
       input: RequestInfo | URL,
       _init?: RequestInit,
     ) => {
-      if (String(input).startsWith("https://www.google.com")) {
+      if (new URL(String(input)).hostname === "www.google.com") {
         return new Response(
           `<html><head><title>Google</title><meta property="og:site_name" content="Google"><meta name="description" content="Search the web"><meta name="keywords" content="search,information"></head></html>`,
           { headers: { "Content-Type": "text/html" } },
