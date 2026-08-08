@@ -1,6 +1,6 @@
 {
   "name": "smart-ai-new-tab",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -45,6 +45,7 @@
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@types/chrome": "^0.1.4",
+    "@types/node": "^22.20.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.2",
@@ -55,6 +56,6 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4",
-    "wxt": "^0.21.1"
+    "wxt": "^0.21.3"
   }
 }
