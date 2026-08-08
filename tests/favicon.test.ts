@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BookmarkIcon } from "@/app/BookmarkIcon";
+import { BookmarkIcon, hasStaticBookmarkIcon } from "@/app/BookmarkIcon";
 import type { BookmarkRecord } from "@/domain/types";
 import {
   buildFaviconCandidates,
@@ -78,6 +78,15 @@ describe("favicon resolution", () => {
       expect(container.querySelector("img"), host).toBeNull();
       unmount();
     }
+  });
+
+  it("uses the Ahrefs icon only for the exact host and dot-delimited subdomains", () => {
+    expect(hasStaticBookmarkIcon("https://ahrefs.com/dashboard")).toBe(true);
+    expect(hasStaticBookmarkIcon("https://app.ahrefs.com/dashboard")).toBe(true);
+    expect(hasStaticBookmarkIcon("https://evilahrefs.com/phishing")).toBe(false);
+    expect(hasStaticBookmarkIcon("https://ahrefs.com.evil.test/phishing")).toBe(
+      false,
+    );
   });
 
   it("reuses a successful site icon first", () => {

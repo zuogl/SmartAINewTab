@@ -106,7 +106,7 @@ export function BookmarkIcon({ bookmark, source }: BookmarkIconProps) {
         <TwitterLogo size={43} color="#1D9BF0" weight="fill" />
       ) : hostname === "trends.google.com" ? (
         <TrendUp size={43} color="#4285F4" weight="bold" />
-      ) : hostname.endsWith("ahrefs.com") ? (
+      ) : hostnameMatchesDomain(hostname, "ahrefs.com") ? (
         <LinkSimple size={43} color="#ff8b24" weight="bold" />
       ) : Brand && brand ? (
         <Brand
@@ -199,9 +199,13 @@ export function hasStaticBookmarkIcon(url: string): boolean {
     hostname === "chatgpt.com" ||
     hostname === "x.com" ||
     hostname === "trends.google.com" ||
-    hostname.endsWith("ahrefs.com") ||
+    hostnameMatchesDomain(hostname, "ahrefs.com") ||
     Boolean(brandForHost(hostname))
   );
+}
+
+function hostnameMatchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
 }
 
 function hostnameFor(url: string): string {

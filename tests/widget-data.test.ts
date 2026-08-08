@@ -52,13 +52,13 @@ describe("widget remote data adapters", () => {
 
   it("parses public Baidu and Bilibili lists and surfaces remote failures", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("top.baidu.com")) {
+      const hostname = new URL(String(input)).hostname;
+      if (hostname === "top.baidu.com") {
         return Response.json({
           data: { cards: [{ content: [{ content: [{ word: "测试热点", index: 1 }] }] }] },
         });
       }
-      if (url.includes("bilibili.com")) {
+      if (hostname === "s.search.bilibili.com") {
         return Response.json({
           list: [{ hot_id: 7, show_name: "B站热点", heat_score: 12345 }],
         });

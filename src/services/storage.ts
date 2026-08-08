@@ -18,6 +18,13 @@ const COMMAND_HISTORY_KEY = "smartNewTab.commandHistory.v1";
 const PREVIEW_PREFIX = "smart-new-tab:";
 const COMMAND_HISTORY_LIMIT = 5;
 
+let previewSettingsSecret:
+  | {
+      serializedSettings: string;
+      apiKey: string;
+    }
+  | undefined;
+
 export interface AiOrganizationState {
   initializedAt: number;
   lastOrganizedAt: number;
@@ -127,7 +134,7 @@ export async function clearCommandHistory(): Promise<void> {
 
 export async function loadSettings(): Promise<AppSettings> {
   const stored = await getValue<Partial<AppSettings>>(SETTINGS_KEY);
-  return {
+  const settings: AppSettings = {
     ...DEFAULT_SETTINGS,
     ...stored,
     cloudApiBaseUrl:
@@ -152,10 +159,65 @@ export async function loadSettings(): Promise<AppSettings> {
         DEFAULT_SETTINGS.background.shuffleRemainingIds,
     },
   };
+  if (hasChromeStorage()) return settings;
+
+  const { provider: _provider, ...settingsWithoutProvider } = settings;
+  const storedApiKey = settings.provider.apiKey;
+  const safeSettings: AppSettings = {
+    ...settingsWithoutProvider,
+    provider: {
+      enabled: settings.provider.enabled,
+      endpoint: settings.provider.endpoint,
+      model: settings.provider.model,
+      apiKey: "",
+      batchSize: settings.provider.batchSize,
+    },
+  };
+  const serializedSettings = JSON.stringify(safeSettings);
+  const previewApiKey =
+    storedApiKey ||
+    (previewSettingsSecret?.serializedSettings === serializedSettings
+      ? previewSettingsSecret.apiKey
+      : "");
+  previewSettingsSecret = {
+    serializedSettings,
+    apiKey: previewApiKey,
+  };
+  if (stored && JSON.stringify(stored) !== serializedSettings) {
+    localStorage.setItem(`${PREVIEW_PREFIX}${SETTINGS_KEY}`, serializedSettings);
+  }
+  return {
+    ...safeSettings,
+    provider: {
+      ...safeSettings.provider,
+      apiKey: previewApiKey,
+    },
+  };
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await setValue(SETTINGS_KEY, settings);
+  if (hasChromeStorage()) {
+    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+    return;
+  }
+  const { provider: _provider, ...settingsWithoutProvider } = settings;
+  const apiKey = settings.provider.apiKey;
+  const safeSettings: AppSettings = {
+    ...settingsWithoutProvider,
+    provider: {
+      enabled: settings.provider.enabled,
+      endpoint: settings.provider.endpoint,
+      model: settings.provider.model,
+      apiKey: "",
+      batchSize: settings.provider.batchSize,
+    },
+  };
+  const serializedSettings = JSON.stringify(safeSettings);
+  previewSettingsSecret = {
+    serializedSettings,
+    apiKey,
+  };
+  localStorage.setItem(`${PREVIEW_PREFIX}${SETTINGS_KEY}`, serializedSettings);
 }
 
 export async function loadCloudState(): Promise<CloudState> {
