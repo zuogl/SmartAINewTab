@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280" role="img" aria-labelledby="title desc">
+  <title id="title">SmartAINewTab small promotional tile</title>
+  <desc id="desc">A minimal SmartAINewTab monogram on a deep evergreen field.</desc>
+  <rect width="440" height="280" fill="#0b2f26"/>
+  <circle cx="220" cy="140" r="112" fill="#9fe6ce" fill-opacity=".08"/>
+  <g fill="#f2f0e9" transform="translate(145 65) scale(.234375)">
+    <path d="M560 100H300c-120 0-200 66-200 170 0 90 60 140 152 160l66-84c-73-13-113-33-113-76 0-45 33-68 95-68h260V100Z"/>
+    <path d="M80 540h260c120 0 200-66 200-170 0-90-60-140-152-160l-66 84c73 13 113 33 113 76 0 45-33 68-95 68H80v102Z"/>
+  </g>
+</svg>

@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Stable deployed resource identifiers retained across the SmartAINewTab product rename.
+  "name": "smart-new-tab-sync",
+  "main": "src/index.ts",
+  // Pinned to the newest workerd date supported by the current test runtime.
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "smart-new-tab-sync",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BACKGROUNDS",
+      "bucket_name": "smart-new-tab-backgrounds"
+    },
+    {
+      "binding": "VAULTS",
+      "bucket_name": "smart-new-tab-vaults"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+  "vars": {
+    "PUBLIC_BASE_URL": "https://sync.example.com",
+    "ALLOWED_EXTENSION_ORIGINS": "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,http://localhost:5173",
+    "ALLOWED_EXTENSION_REDIRECT_URIS": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/google",
+    "SESSION_TTL_DAYS": "7",
+    "GOOGLE_TOKEN_URL": "https://oauth2.googleapis.com/token",
+    "GOOGLE_JWKS_URL": "https://www.googleapis.com/oauth2/v3/certs"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    }
+  }
+}

@@ -1,0 +1,569 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SmartAINewTab Sync API",
+    "version": "1.0.0",
+    "description": "Google account sessions and opaque R2 object storage for client-side encrypted SmartAINewTab backups. D1 stores vault metadata only."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787",
+      "description": "Local Wrangler development"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Worker is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok", "service"],
+                  "properties": {
+                    "ok": { "const": true },
+                    "service": { "const": "smart-new-tab-sync" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backgrounds": {
+      "get": {
+        "operationId": "listPublicBackgrounds",
+        "responses": {
+          "200": {
+            "description": "Public curated background catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["backgrounds", "updatedAt"],
+                  "properties": {
+                    "backgrounds": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Background" }
+                    },
+                    "updatedAt": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backgrounds/{id}": {
+      "get": {
+        "operationId": "getPublicBackground",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,119}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable WebP background image",
+            "content": { "image/webp": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "404": { "description": "Background not found" }
+        }
+      }
+    },
+    "/v1/auth/google/start": {
+      "get": {
+        "operationId": "startGoogleLogin",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "uri" }
+          },
+          {
+            "name": "client_state",
+            "in": "query",
+            "required": true,
+            "description": "Random extension-generated state returned unchanged to the extension callback",
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{32,200}$" }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "required": true,
+            "description": "SHA-256 PKCE challenge for the extension-generated verifier",
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43,128}$" }
+          }
+        ],
+        "responses": {
+          "302": { "description": "Redirect to Google authorization" },
+          "400": {
+            "description": "Redirect URI not allowlisted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many pending OAuth starts for this edge client",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/google/callback": {
+      "get": {
+        "operationId": "completeGoogleLogin",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "302": { "description": "Redirect to the allowlisted extension callback" },
+          "400": {
+            "description": "Missing, invalid, or expired OAuth values",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/google/exchange": {
+      "post": {
+        "operationId": "exchangeGoogleLoginCode",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["code", "codeVerifier"],
+                "properties": {
+                  "code": { "type": "string", "minLength": 20, "maxLength": 500 },
+                  "codeVerifier": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43,128}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["sessionToken", "user"],
+                  "properties": {
+                    "sessionToken": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired one-time code",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin not allowlisted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds 4 KB",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["user"],
+                  "properties": {
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/logout": {
+      "post": {
+        "operationId": "logout",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ok" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/vault": {
+      "get": {
+        "operationId": "getVault",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Encrypted vault or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["vault"],
+                  "properties": {
+                    "vault": {
+                      "oneOf": [
+                        { "$ref": "#/components/schemas/Vault" },
+                        { "type": "null" }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": {
+            "description": "Encrypted R2 object failed integrity validation",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "503": {
+            "description": "Encrypted R2 object is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putVault",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VaultWrite" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["revision", "updatedAt"],
+                  "properties": {
+                    "revision": { "type": "integer", "minimum": 1 },
+                    "updatedAt": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": {
+            "description": "Optimistic revision conflict or a durable vault deletion is still in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/Error" },
+                    {
+                      "type": "object",
+                      "required": ["currentRevision"],
+                      "properties": {
+                        "currentRevision": { "type": "integer", "minimum": 0 },
+                        "currentUpdatedAt": { "type": "integer" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Encrypted payload exceeds limit",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteVault",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ok" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/vault/meta": {
+      "get": {
+        "operationId": "getVaultMetadata",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Current encrypted vault revision without its ciphertext",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["vault"],
+                  "properties": {
+                    "vault": {
+                      "oneOf": [
+                        { "$ref": "#/components/schemas/VaultMetadata" },
+                        { "type": "null" }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/account": {
+      "delete": {
+        "operationId": "deleteAccount",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ok" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "The session was not created by a Google login within the last 10 minutes",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "responses": {
+      "Ok": {
+        "description": "Action completed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["ok"],
+              "properties": { "ok": { "const": true } }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or expired session",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Background": {
+        "type": "object",
+        "required": ["id", "name", "category", "url", "thumbnailUrl"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "category": { "enum": ["nature", "ocean", "city", "space", "minimal"] },
+          "url": { "type": "string", "format": "uri" },
+          "thumbnailUrl": { "type": "string", "format": "uri" },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "attribution": { "type": "string" },
+          "license": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "origin_not_allowed",
+              "redirect_uri_not_allowed",
+              "invalid_auth_start",
+              "too_many_auth_attempts",
+              "missing_google_callback_values",
+              "invalid_or_expired_state",
+              "invalid_or_expired_code",
+              "invalid_request",
+              "unauthorized",
+              "payload_too_large",
+              "revision_conflict",
+              "recent_auth_required",
+              "vault_deletion_in_progress",
+              "vault_unavailable",
+              "vault_corrupt",
+              "not_found",
+              "internal_error"
+            ]
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": ["id", "email"],
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "displayName": { "type": "string" },
+          "avatarUrl": { "type": "string", "format": "uri" }
+        }
+      },
+      "Kdf": {
+        "type": "object",
+        "required": ["name", "iterations", "salt"],
+        "properties": {
+          "name": { "const": "PBKDF2-SHA-256" },
+          "iterations": {
+            "type": "integer",
+            "minimum": 100000,
+            "maximum": 2000000
+          },
+          "salt": { "type": "string" }
+        }
+      },
+      "EncryptedVaultFields": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "ciphertext",
+          "iv",
+          "checksum",
+          "wrappedKey",
+          "wrappedKeyIv",
+          "kdf"
+        ],
+        "properties": {
+          "schemaVersion": { "type": "integer", "minimum": 1 },
+          "ciphertext": { "type": "string", "maxLength": 8000000 },
+          "iv": { "type": "string" },
+          "checksum": { "type": "string" },
+          "checksumKind": {
+            "type": "string",
+            "enum": ["ciphertext-sha256"],
+            "description": "Absent only on legacy vaults whose checksum was calculated from plaintext."
+          },
+          "wrappedKey": { "type": "string", "maxLength": 2000 },
+          "wrappedKeyIv": { "type": "string" },
+          "kdf": { "$ref": "#/components/schemas/Kdf" }
+        }
+      },
+      "VaultWrite": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EncryptedVaultFields" },
+          {
+            "type": "object",
+            "required": ["expectedRevision"],
+            "properties": {
+              "expectedRevision": { "type": "integer", "minimum": 0 }
+            }
+          }
+        ]
+      },
+      "Vault": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EncryptedVaultFields" },
+          {
+            "type": "object",
+            "required": ["revision", "updatedAt"],
+            "properties": {
+              "revision": { "type": "integer", "minimum": 1 },
+              "updatedAt": { "type": "integer" }
+            }
+          }
+        ]
+      },
+      "VaultMetadata": {
+        "type": "object",
+        "required": ["revision", "updatedAt"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1 },
+          "updatedAt": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

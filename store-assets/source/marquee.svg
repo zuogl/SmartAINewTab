@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="title desc">
+  <title id="title">SmartAINewTab marquee promotional tile</title>
+  <desc id="desc">The SmartAINewTab monogram and wordmark on a deep evergreen field.</desc>
+  <rect width="1400" height="560" fill="#0b2f26"/>
+  <circle cx="278" cy="280" r="220" fill="#9fe6ce" fill-opacity=".08"/>
+  <g fill="#f2f0e9" transform="translate(118 120) scale(.5)">
+    <path d="M560 100H300c-120 0-200 66-200 170 0 90 60 140 152 160l66-84c-73-13-113-33-113-76 0-45 33-68 95-68h260V100Z"/>
+    <path d="M80 540h260c120 0 200-66 200-170 0-90-60-140-152-160l-66 84c73 13 113 33 113 76 0 45-33 68-95 68H80v102Z"/>
+  </g>
+  <text x="540" y="270" fill="#f2f0e9" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="520" letter-spacing="-3">SmartAI<tspan font-weight="720">NewTab</tspan></text>
+  <rect x="542" y="314" width="238" height="8" rx="4" fill="#9fe6ce"/>
+</svg>

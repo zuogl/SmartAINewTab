@@ -1,0 +1,27 @@
+{
+  "name": "smart-ai-new-tab-sync-worker",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typegen": "wrangler types --env-file .dev.vars.example --strict-vars false",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typegen && npm run typecheck && npm run test",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "deploy:production:dry-run": "wrangler deploy --config wrangler.production.jsonc --dry-run",
+    "deploy:production": "wrangler deploy --config wrangler.production.jsonc",
+    "db:migrate:local": "wrangler d1 migrations apply smart-new-tab-sync --local"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.114.0"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
