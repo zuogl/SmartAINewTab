@@ -19,7 +19,7 @@
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.118.0"
   },
   "dependencies": {
     "zod": "^4.4.3"
