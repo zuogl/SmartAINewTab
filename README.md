@@ -1,156 +1,170 @@
-# SmartAINewTab
+<p align="center">
+  <img src="assets/brand/smart-ai-new-tab-app-icon.svg" width="96" height="96" alt="SmartAINewTab 图标">
+</p>
 
-SmartAINewTab 是一个基于 WXT、React、TypeScript 和 Manifest V3 的 Chrome
-新标签页扩展。它以 Chrome 原生书签为默认数据源，用独立的 sidecar
-布局保存首页分类、分组和排序，并提供本地优先的自然语言检索和可选的
-OpenAI-compatible BYOK 能力。
+<h1 align="center">SmartAINewTab</h1>
 
-## 当前能力
+<p align="center">
+  一个本地优先、AI 可选、不会擅自重排原生书签的 Chrome 新标签页。
+</p>
 
-- 内置“跟随浏览器 / 简体中文 / 繁體中文 / 日本語 / 한국어 / English”语言设置，
-  自动将中国大陆、港澳台、日本、韩国和其他地区分别映射到对应界面语言，保存后立即生效；
-  不会翻译或改写用户的书签、标签以及 AI 返回内容。
-- 覆盖 Chrome 新标签页，提供沉浸式摄影背景、磨砂搜索框、图标网格和右侧分类轨道。
-- 时间与搜索框固定在首页上方，书签和可选小部件只在搜索框与每日警句之间的独立区域滚动。
-  主界面一次只渲染当前选中的一级分类；滚动到该分类顶部或底部后继续滚动，会切换到相邻一级分类。
-- 桌面书签网格使用与搜索框相同的内容宽度并优先展示 8 列。右侧分类轨道只显示图标，
-  使用即时左侧浮签、高亮和 hover 反馈；可在通用偏好中改为仅当鼠标到达屏幕右缘时显示。
-- “大分类 → 分组 → 图标”三级结构；分类、分组和图标均可拖拽排序。
-- 新增、编辑、删除图标；新增、重命名、删除分类和分组；折叠/展开分组。
-- 左键、组合键、中键与右键菜单支持当前页/新标签页打开。
-- Google、百度、Bing、DuckDuckGo 网页搜索。
-- 跨全部 Chrome 书签的本地检索；自然语言结果可自动切换分类、展开分组、
-  滚动并高亮目标；低置信度时只展示候选，不自动打开网址。
-- DeepSeek 默认 Provider / OpenAI-compatible BYOK；默认模型为
-  `deepseek-v4-flash`，无 Key 时所有本地能力仍可用。
-- 可选的新书签自动 AI 标签：后台捕获 Chrome 新增书签，读取网页 `head` 中的
-  title/description/keywords/站点名称，不发送网页正文；提示词要求 6–10 个标签并保留网站品牌与专有名称。
-- 首次全量 AI 整理采用两阶段：先根据整库概况从 20 个通用候选中规划实际需要的
-  一级分类（通常 8–16 个，硬上限 24），再逐书签只生成标签、摘要和一级分类。
-  全部书签成功后才按一级分类分别规划二级分组；任一书签失败都会等待用户重试，不会提前重建布局。
-- 二级分组是可选结构：每个一级分类最多 3 个，只有明确且至少 3 个成员的稳定子主题
-  才能建组，多数书签直接放在一级分类下。模型返回的跨分类或未知 ID 会被安全忽略，
-  对应书签仍留在其原一级分类。后续新增书签只尝试匹配已有分组，匹配不足时
-  留在一级分类下，不会为单个书签创建新组。整理前布局可一键恢复。
-- 标签请求会保留用户创建的有效书签目录路径作为重要分类证据，同时剔除 Chrome
-  默认根目录；旧构建已有完整 AI 结果时，不重复逐书签打标签，但仍会调用 Provider
-  规划一级分类并执行一次全局分组。
-- 持久 AI 标签队列：短批次、进度可见、可取消、可重试、闹钟续跑。
-- 书签体检：常规扫描不携带 Cookie；401/403 与疑似登录跳转可经二次确认后
-  使用当前登录态复检。跳转按安全永久、临时、同站路径和跨域风险分组，地址更新
-  必须预览确认并保存一键撤销快照。
-- 手动导入旧扩展导出的 JSON 标签；按 URL / 标题映射到 bookmark ID。
-- 完整 JSON 导入/导出：备份并恢复分类、分组、排序、手动/AI 标签和非敏感设置；
-  Provider API Key 永不进入备份。
-- Google 账户登录与 Cloudflare 加密云备份：书签快照在浏览器端使用 AES-GCM
-  加密，恢复密码通过 PBKDF2 包装数据密钥，私有 R2 只保存密文，D1 只保存元数据。
-- 同一套界面支持 Chrome 扩展构建和普通浏览器视觉预览。
+<p align="center">
+  <a href="https://github.com/zuogl/SmartAINewTab/actions/workflows/ci.yml"><img src="https://github.com/zuogl/SmartAINewTab/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache License 2.0"></a>
+  <img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4" alt="Chrome Manifest V3">
+</p>
+
+SmartAINewTab 使用 Chrome 原生书签作为数据源，在新标签页中提供分类、分组、图标网格、
+统一搜索、AI 整理和书签体检。没有 AI Key、没有云账户时，书签展示、管理和本地搜索仍然
+可以正常使用。
+
+![SmartAINewTab 首页](store-assets/screenshots/01-home.png)
+
+## 功能亮点
+
+- **不破坏原生书签**：分类、分组和个性排序保存在独立的 sidecar 布局中，拖拽操作不会
+  擅自移动 Chrome 原生书签文件夹。
+- **统一搜索入口**：支持 Google、百度、Bing、DuckDuckGo 网页搜索，以及跨全部书签的
+  本地搜索和自然语言检索。
+- **可选 AI 整理**：通过用户自备的 API Key（BYOK）生成标签、摘要和分类建议；任务支持
+  查看进度、取消、重试，并可在 Manifest V3 service worker 重启后继续。
+- **完整书签管理**：创建和编辑分类、分组、书签与标签，支持拖拽排序、右键菜单、当前页或
+  新标签页打开。
+- **书签体检**：检测重复链接、失效链接、访问受限和跳转异常；支持打开验证、复检、忽略、
+  删除以及地址修复前预览。
+- **备份与恢复**：支持本地 JSON 导入导出；可选云备份在浏览器端加密后再上传，服务端无法
+  解密书签内容。
+- **个性化新标签页**：提供摄影背景、背景轮播、小组件、时间样式和右侧分类导航。
+- **多语言界面**：支持简体中文、繁體中文、English、日本語、한국어以及跟随浏览器。
+
+| 全部书签搜索 | AI 标签与编辑 |
+| --- | --- |
+| ![全部书签搜索](store-assets/screenshots/02-search.png) | ![AI 标签与编辑](store-assets/screenshots/04-tags.png) |
+
+| 自然语言命令 | 书签体检 |
+| --- | --- |
+| ![自然语言命令](store-assets/screenshots/03-command.png) | ![书签体检](store-assets/screenshots/05-health.png) |
+
+## 隐私原则
+
+SmartAINewTab 默认在本地处理和保存书签数据。联网功能由用户主动使用或明确开启，并按需
+申请对应网站的可选访问权限。
+
+- 不内置任何 AI Provider API Key；API Key 只保存在本机，不进入本地导出或云备份。
+- 使用 AI 功能时，只向用户选择的 Provider 发送完成当前任务所需的书签元数据；不发送网页正文。
+- 不使用 content script，不注入用户访问的网页，也不申请 `cookies` 权限。
+- 页面元数据、favicon 和常规书签体检请求不携带登录 Cookie。
+- 云备份是可选功能，备份内容在浏览器中完成端到端加密；恢复密码不会上传，服务端无法代为找回。
+- 不出售用户数据，不接入广告或用户画像 SDK。
+
+完整的数据范围、第三方处理者和删除方式请阅读[隐私政策](docs/PRIVACY.md)。
+
+## 从源码安装
+
+### 环境要求
+
+- Chrome 或其他兼容 Manifest V3 的 Chromium 浏览器
+- Node.js 22 或更高版本
+- npm
+
+### 构建扩展
+
+```bash
+git clone https://github.com/zuogl/SmartAINewTab.git
+cd SmartAINewTab
+npm ci
+npm run build
+```
+
+构建完成后：
+
+1. 打开 `chrome://extensions`；
+2. 开启右上角的“开发者模式”；
+3. 点击“加载已解压的扩展程序”；
+4. 选择项目中的 `.output/chrome-mv3` 目录；
+5. 打开一个新标签页。
+
+> 从源码构建的扩展与未来可能发布的商店版本是独立安装实例，本地数据不会自动共享。
 
 ## 本地开发
 
+安装依赖后，可以选择普通浏览器预览或真实扩展环境：
+
 ```bash
-npm install
+# 快速预览界面，默认访问 http://localhost:5173
 npm run dev
+
+# 在 WXT 扩展开发环境中运行
+npm run dev:extension
 ```
 
-默认预览地址为 `http://localhost:5173`。指定视觉验收端口：
-
-```bash
-npm run dev -- --host 0.0.0.0 --port 4173 --strictPort
-```
-
-## 构建 Chrome 扩展
+提交改动前运行完整检查：
 
 ```bash
 npm run check
 ```
 
-构建产物位于 `.output/chrome-mv3`。在 `chrome://extensions` 开启开发者模式，
-选择“加载已解压的扩展程序”，指向该目录即可。
+该命令会检查公开仓库边界、背景素材、第三方许可证、TypeScript、测试和 Chrome MV3 构建。
+更多开发约定见[贡献指南](CONTRIBUTING.md)。
 
-项目改动完成后使用统一的本地发布命令：
+## 可选 AI Provider
 
-```bash
-npm run release:local
+AI 功能采用 BYOK 模式。用户可以在设置中选择预置 Provider，或填写兼容接口的 endpoint、
+模型和自己的 API Key。项目不会在源码中提供共享密钥，也不会代理或转售模型额度。
+
+没有配置 Provider 时，以下功能仍然可用：
+
+- 新标签页和原生书签管理；
+- 分类、分组、排序与手动标签；
+- 基于标题、URL、标签和分类的本地搜索；
+- 本地备份与恢复；
+- 不依赖 AI 的书签体检和个性化功能。
+
+## 可选云同步
+
+仓库中的 [`worker/`](worker/) 提供基于 Cloudflare Workers、D1 和私有 R2 的自托管同步后端，
+用于 Google OAuth、会话管理和加密备份的版本化存储。Worker 不接收 AI Provider API Key，
+也无法解密用户备份。
+
+部署前请阅读 [Worker 说明](worker/README.md)。Google OAuth、Cloudflare 资源和生产环境允许列表
+需要由部署者自行配置；克隆并构建扩展本身不会自动创建或启用云服务。
+
+## 技术栈
+
+- [WXT](https://wxt.dev/) + React + TypeScript
+- Chrome Manifest V3、Bookmarks API、Storage API、Alarms API 和 Identity API
+- IndexedDB / Dexie
+- Vitest
+- 可选 Cloudflare Workers + D1 + R2
+
+主要目录：
+
+```text
+src/          扩展界面、领域模型和浏览器服务
+worker/       可选的 Cloudflare 同步后端
+docs/         架构、隐私、安全边界和资源归属文档
+store-assets/ 商店展示素材及其可编辑源文件
+scripts/      构建、检查和公开发布辅助脚本
 ```
 
-该命令会自动递增补丁版本，执行类型检查、测试和 Chrome MV3 构建，并把可加载的
-扩展原子更新到 `release/SmartAINewTab-local-extension`。如果检查或构建失败，版本文件
-会回滚，现有可加载版本不会被覆盖。
-
-## Cloudflare 后端（本地）
-
-后端位于 `worker/`，使用 Cloudflare Workers + D1 + 私有 R2。它提供 Google OAuth
-回调、会话和单用户加密仓版本控制；不保存 Provider API Key，也无法解密备份。
-
-```bash
-cd worker
-npm install
-cp .dev.vars.example .dev.vars
-# 仅在本机 .dev.vars 填写 Google OAuth 测试凭据；该文件已被忽略
-npm run db:migrate:local
-npm run dev
-```
-
-另一个终端可以检查：
-
-```bash
-curl http://localhost:8787/health
-```
-
-生产部署前还必须完成 Cloudflare 登录、创建/绑定 D1、填写正式 Worker
-URL、扩展 ID 允许列表，以及在 Google Cloud 建立 Web application OAuth
-客户端。具体步骤见 [Worker 部署说明](worker/README.md)。当前仓库不包含任何
-Cloudflare 或 Google 私密凭据。
-
-仓库中的云功能代码和本地测试通过，不等于其他用户已经可以使用生产云同步。正式开放前
-还要应用远端迁移、确认私有 R2、发布 Google OAuth consent screen，并完成两个独立
-Chrome 配置文件之间的上传/恢复/删除验收。进度以[公开发布清单](docs/RELEASE_CHECKLIST.md)
-为准。
-
-## 参与和发布
-
-- 官网用户文档由独立的私有官网仓库维护并单独发布；本公开仓库不包含官网源码
-- 仓库文档索引：[docs/README.md](docs/README.md)
-- 贡献说明：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 安全政策：[SECURITY.md](SECURITY.md)
-- 更新记录：[CHANGELOG.md](CHANGELOG.md)
-- Chrome Web Store 申报文案：[docs/CHROME_WEB_STORE.md](docs/CHROME_WEB_STORE.md)
-- 完整公开发布清单：[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
-- 当前就绪状态：[docs/READINESS_STATUS.md](docs/READINESS_STATUS.md)
-
-项目源码采用 [Apache License 2.0](LICENSE)；第三方依赖、字体、图标和素材仍分别遵循
-其原始许可证，详见 [NOTICE](NOTICE)、[第三方许可证汇总](public/THIRD_PARTY_NOTICES.txt)
-和[归属说明](docs/ATTRIBUTION.md)。Apache-2.0 不授予项目名称、图标或其他商标权利。
-
-## 数据与迁移原则
-
-- Chrome bookmarks API 是书签事实来源。
-- 首页结构和个性排序保存在 `chrome.storage.local` 的可逆 sidecar 中；
-  拖拽不会重排原生书签文件夹。
-- AI 标签、摘要、一级分类、可选分组建议和任务阶段保存在扩展自己的 IndexedDB 中，主键是
-  bookmark ID。
-- 完整导入恢复只写 sidecar、设置和扩展元数据；不会创建、删除或移动 Chrome
-  原生书签。原书签 ID 变化时使用规范化 URL 兜底匹配。
-- 扩展更新或“重新加载”会保留本地标签；卸载扩展通常会清除本地扩展存储，
-  可通过导出的完整备份或加密云备份恢复。
-- 旧项目不会被自动扫描。迁移必须由用户在设置中手动选择导出的 JSON；
-  不读取或复制旧项目内的私人 `bookmarks.json`。
-
-## 常用命令
-
-```bash
-npm run typecheck
-npm run test:run
-npm run build
-npm run zip
-npm run check:worker
-npm run check:all
-```
-
-架构、隐私和资源归属见：
+## 文档
 
 - [架构说明](docs/ARCHITECTURE.md)
-- [隐私边界](docs/PRIVACY.md)
-- [参考与归属](docs/ATTRIBUTION.md)
-- [依赖风险记录](docs/DEPENDENCY_RISKS.md)
+- [隐私政策](docs/PRIVACY.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全政策](SECURITY.md)
+- [更新记录](CHANGELOG.md)
+- [素材与第三方归属](docs/ATTRIBUTION.md)
+
+## 参与贡献
+
+Issue 和 Pull Request 都欢迎。提交前请先阅读[贡献指南](CONTRIBUTING.md)，并确保示例、日志和
+截图中不包含 API Key、Token、Cookie、恢复密码、邮箱或私人书签内容。
+
+安全漏洞请遵循[安全政策](SECURITY.md)进行私密报告，不要在公开 Issue 中披露可利用细节。
+
+## 许可证
+
+项目源码采用 [Apache License 2.0](LICENSE)。第三方依赖、字体、图标和素材仍分别遵循其
+原始许可证，详见 [NOTICE](NOTICE)、[第三方许可证汇总](public/THIRD_PARTY_NOTICES.txt)和
+[归属说明](docs/ATTRIBUTION.md)。Apache-2.0 不授予项目名称、图标或其他商标权利。
