@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
 import {
   access,
   cp,
@@ -14,52 +14,92 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packagePath = path.join(projectRoot, "package.json");
-const lockPath = path.join(projectRoot, "package-lock.json");
+const developmentBuildPath = path.join(projectRoot, "development-build.json");
+const productionPublicKeyPath = path.join(
+  projectRoot,
+  "config",
+  "production-extension-public-key.txt",
+);
 const outputDirectory = path.join(projectRoot, ".output", "chrome-mv3");
 const releaseRoot = path.join(projectRoot, "release");
-const targetDirectory = path.join(releaseRoot, "SmartAINewTab-local-extension");
+const identity = parseIdentity(process.argv.slice(2));
+const identityConfig = await resolveIdentityConfig(identity);
+const targetName =
+  identity === "production"
+    ? "SmartAINewTab-production-id-qa-extension"
+    : "SmartAINewTab-local-extension";
+const targetDirectory = path.join(releaseRoot, targetName);
 const transactionId = `${Date.now()}-${process.pid}`;
 const nextDirectory = path.join(
   releaseRoot,
-  `.SmartAINewTab-local-extension.next-${transactionId}`,
+  `.${targetName}.next-${transactionId}`,
 );
 const previousDirectory = path.join(
   releaseRoot,
-  `.SmartAINewTab-local-extension.previous-${transactionId}`,
+  `.${targetName}.previous-${transactionId}`,
 );
-const expectedExtensionId = "akbemgeeppcdocpjimlkbhfoambjigej";
 
-const originalPackageText = await readFile(packagePath, "utf8");
-const originalLockText = await readFile(lockPath, "utf8");
-const packageDocument = JSON.parse(originalPackageText);
-const lockDocument = JSON.parse(originalLockText);
-const previousVersion = packageDocument.version;
-const nextVersion = incrementPatchVersion(previousVersion);
-let versionFilesChanged = false;
+const packageDocument = JSON.parse(await readFile(packagePath, "utf8"));
+const originalDevelopmentBuildText = await readFile(developmentBuildPath, "utf8");
+const developmentBuildDocument = JSON.parse(originalDevelopmentBuildText);
+const productionVersion = packageDocument.version;
+assertProductionVersion(productionVersion);
+assertDevelopmentBuild(developmentBuildDocument);
+const nextBuild =
+  developmentBuildDocument.baseVersion === productionVersion
+    ? developmentBuildDocument.build + 1
+    : 1;
+if (nextBuild > 65_535) {
+  throw new Error(
+    "Development build counter is exhausted for the current production version; bump package.json version first",
+  );
+}
+const nextVersion = `${productionVersion}.${nextBuild}`;
+const nextVersionName =
+  identity === "production"
+    ? `${productionVersion}-prod-id-qa.${nextBuild}`
+    : `${productionVersion}-dev.${nextBuild}`;
+let developmentBuildChanged = false;
 let previousReleaseMoved = false;
 let releaseUpdated = false;
 
 try {
-  packageDocument.version = nextVersion;
-  lockDocument.version = nextVersion;
-  if (lockDocument.packages?.[""]) {
-    lockDocument.packages[""].version = nextVersion;
-  }
-  await Promise.all([
-    writeJson(packagePath, packageDocument),
-    writeJson(lockPath, lockDocument),
-  ]);
-  versionFilesChanged = true;
+  await writeJson(developmentBuildPath, {
+    baseVersion: productionVersion,
+    build: nextBuild,
+  });
+  developmentBuildChanged = true;
 
   await run("npm", ["run", "check"], {
-    SMARTAINEWTAB_LOCAL_RELEASE: "1",
+    environment: {
+      SMARTAINEWTAB_LOCAL_RELEASE: "1",
+      SMARTAINEWTAB_LOCAL_VERSION: nextVersion,
+      SMARTAINEWTAB_LOCAL_VERSION_NAME: nextVersionName,
+      ...(identityConfig.publicKey
+        ? { SMARTAINEWTAB_LOCAL_EXTENSION_KEY: identityConfig.publicKey }
+        : {}),
+    },
+    removeEnvironment:
+      identity === "development"
+        ? ["SMARTAINEWTAB_LOCAL_EXTENSION_KEY"]
+        : [],
   });
-  await verifyBuiltExtension(outputDirectory, nextVersion);
+  await verifyBuiltExtension(
+    outputDirectory,
+    nextVersion,
+    nextVersionName,
+    identityConfig.expectedExtensionId,
+  );
 
   await mkdir(releaseRoot, { recursive: true });
   await rm(nextDirectory, { recursive: true, force: true });
   await cp(outputDirectory, nextDirectory, { recursive: true });
-  await verifyBuiltExtension(nextDirectory, nextVersion);
+  await verifyBuiltExtension(
+    nextDirectory,
+    nextVersion,
+    nextVersionName,
+    identityConfig.expectedExtensionId,
+  );
 
   await rm(previousDirectory, { recursive: true, force: true });
   if (await exists(targetDirectory)) {
@@ -83,14 +123,18 @@ try {
     previousReleaseMoved = false;
   }
 
-  console.log(`Local Chrome extension released: ${previousVersion} -> ${nextVersion}`);
+  console.log(
+    `${identityConfig.label} released: production ${productionVersion}; local ${nextVersionName}`,
+  );
+  console.log(`Extension ID: ${identityConfig.expectedExtensionId}`);
   console.log(targetDirectory);
 } catch (error) {
-  if (versionFilesChanged && !releaseUpdated) {
-    await Promise.all([
-      writeFile(packagePath, originalPackageText, "utf8"),
-      writeFile(lockPath, originalLockText, "utf8"),
-    ]);
+  if (developmentBuildChanged && !releaseUpdated) {
+    await writeFile(
+      developmentBuildPath,
+      originalDevelopmentBuildText,
+      "utf8",
+    );
   }
   await rm(nextDirectory, { recursive: true, force: true });
   if (previousReleaseMoved && !(await exists(targetDirectory))) {
@@ -99,13 +143,76 @@ try {
   throw error;
 }
 
-function incrementPatchVersion(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!match) {
-    throw new Error(`Unsupported package version: ${version}`);
+function parseIdentity(args) {
+  if (args.length === 0) return "development";
+  if (args.length === 1 && args[0] === "--identity=production") {
+    return "production";
   }
-  const [, major, minor, patch] = match;
-  return `${major}.${minor}.${Number(patch) + 1}`;
+  throw new Error(
+    `Unsupported arguments: ${args.join(" ")}. Expected no arguments or --identity=production`,
+  );
+}
+
+async function resolveIdentityConfig(selectedIdentity) {
+  if (selectedIdentity === "development") {
+    return {
+      label: "Local development Chrome extension",
+      expectedExtensionId: "akbemgeeppcdocpjimlkbhfoambjigej",
+      publicKey: undefined,
+    };
+  }
+
+  const configuredKey =
+    process.env.SMARTAINEWTAB_PRODUCTION_PUBLIC_KEY ??
+    (await readOptionalFile(productionPublicKeyPath));
+  if (!configuredKey) {
+    throw new Error(
+      `Production public key is required. Set SMARTAINEWTAB_PRODUCTION_PUBLIC_KEY or create ${productionPublicKeyPath} from Chrome Web Store Developer Dashboard > Package > View public key`,
+    );
+  }
+  const publicKey = normalizePublicKey(configuredKey);
+  const expectedExtensionId = "hdajgpnnncgdddpjbdggaochnbgpfngl";
+  const actualExtensionId = extensionIdFromPublicKey(publicKey);
+  if (actualExtensionId !== expectedExtensionId) {
+    throw new Error(
+      `Production public key mismatch: expected ${expectedExtensionId}, received ${actualExtensionId}`,
+    );
+  }
+  return {
+    label: "Production-ID QA Chrome extension",
+    expectedExtensionId,
+    publicKey,
+  };
+}
+
+function assertProductionVersion(version) {
+  const parts = typeof version === "string" ? version.split(".") : [];
+  if (
+    parts.length !== 3 ||
+    parts.some(
+      (part) =>
+        !/^(0|[1-9]\d*)$/.test(part) ||
+        Number(part) < 0 ||
+        Number(part) > 65_535,
+    )
+  ) {
+    throw new Error(
+      `Production version must contain exactly three integers from 0 to 65535; received ${version}`,
+    );
+  }
+}
+
+function assertDevelopmentBuild(document) {
+  assertProductionVersion(document.baseVersion);
+  if (
+    !Number.isInteger(document.build) ||
+    document.build < 0 ||
+    document.build > 65_535
+  ) {
+    throw new Error(
+      `Development build must be an integer from 0 to 65535; received ${document.build}`,
+    );
+  }
 }
 
 async function writeJson(filePath, value) {
@@ -121,7 +228,12 @@ async function exists(filePath) {
   }
 }
 
-async function verifyBuiltExtension(directory, expectedVersion) {
+async function verifyBuiltExtension(
+  directory,
+  expectedVersion,
+  expectedVersionName,
+  expectedExtensionId,
+) {
   const resolvedDirectory = path.resolve(directory);
   if (!resolvedDirectory.startsWith(`${projectRoot}${path.sep}`)) {
     throw new Error(`Refusing to verify path outside project: ${directory}`);
@@ -132,6 +244,11 @@ async function verifyBuiltExtension(directory, expectedVersion) {
   if (manifest.version !== expectedVersion) {
     throw new Error(
       `Manifest version mismatch: expected ${expectedVersion}, received ${manifest.version}`,
+    );
+  }
+  if (manifest.version_name !== expectedVersionName) {
+    throw new Error(
+      `Manifest version name mismatch: expected ${expectedVersionName}, received ${manifest.version_name}`,
     );
   }
   if (typeof manifest.key !== "string" || manifest.key.length === 0) {
@@ -151,9 +268,23 @@ async function verifyBuiltExtension(directory, expectedVersion) {
   ]);
 }
 
+function normalizePublicKey(value) {
+  const normalized = value
+    .replace(/-----BEGIN PUBLIC KEY-----/g, "")
+    .replace(/-----END PUBLIC KEY-----/g, "")
+    .replace(/\s+/g, "");
+  if (!normalized || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+    throw new Error("Extension public key must be a base64-encoded SPKI public key");
+  }
+  const der = Buffer.from(normalized, "base64");
+  createPublicKey({ key: der, format: "der", type: "spki" });
+  return der.toString("base64");
+}
+
 function extensionIdFromPublicKey(key) {
+  const normalizedKey = normalizePublicKey(key);
   const digest = createHash("sha256")
-    .update(Buffer.from(key, "base64"))
+    .update(Buffer.from(normalizedKey, "base64"))
     .digest()
     .subarray(0, 16);
 
@@ -163,14 +294,25 @@ function extensionIdFromPublicKey(key) {
     .join("");
 }
 
-async function run(command, args, extraEnvironment = {}) {
+async function readOptionalFile(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function run(command, args, options = {}) {
   await new Promise((resolve, reject) => {
+    const environment = {
+      ...process.env,
+      ...options.environment,
+    };
+    for (const name of options.removeEnvironment ?? []) delete environment[name];
     const child = spawn(command, args, {
       cwd: projectRoot,
-      env: {
-        ...process.env,
-        ...extraEnvironment,
-      },
+      env: environment,
       stdio: "inherit",
       shell: process.platform === "win32",
     });

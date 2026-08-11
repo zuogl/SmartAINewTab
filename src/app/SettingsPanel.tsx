@@ -1347,6 +1347,24 @@ export function SettingsPanel({
             }
           />
         </label>
+        <label className="switch-row">
+          <span className="switch-copy">
+            <strong>{t("显示空的“未分类”分类")}</strong>
+            <small>
+              {t("关闭后，当未分类书签为 0 时隐藏；新增未分类书签后自动显示。")}
+            </small>
+          </span>
+          <input
+            type="checkbox"
+            checked={screenDisplay.showEmptyUncategorizedCategory}
+            onChange={(event) =>
+              setScreenDisplay((current) => ({
+                ...current,
+                showEmptyUncategorizedCategory: event.target.checked,
+              }))
+            }
+          />
+        </label>
       </section>
       )}
 

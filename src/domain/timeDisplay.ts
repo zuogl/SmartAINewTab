@@ -61,6 +61,10 @@ export function normalizeScreenDisplayPreferences(
       typeof stored.alwaysShowCategoryRail === "boolean"
         ? stored.alwaysShowCategoryRail
         : DEFAULT_SETTINGS.screenDisplay.alwaysShowCategoryRail,
+    showEmptyUncategorizedCategory:
+      typeof stored.showEmptyUncategorizedCategory === "boolean"
+        ? stored.showEmptyUncategorizedCategory
+        : DEFAULT_SETTINGS.screenDisplay.showEmptyUncategorizedCategory,
     timeStyle: normalizeTimeStyle(stored.timeStyle),
     showDate:
       typeof stored.showDate === "boolean"

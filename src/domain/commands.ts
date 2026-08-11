@@ -6,6 +6,7 @@ import {
   getCategoryBookmarkIds,
   lockBookmarkPlacement,
   moveBookmarkInWorkspace,
+  syncWorkspaceRootOrders,
   UNCATEGORIZED_CATEGORY_ID,
 } from "./layout";
 import type {
@@ -544,6 +545,7 @@ export function executeBookmarkCommandPlan(
       break;
   }
 
+  syncWorkspaceRootOrders(next);
   next.updatedAt = Date.now();
   return {
     workspace: next,

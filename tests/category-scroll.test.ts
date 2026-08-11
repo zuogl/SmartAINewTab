@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceCategoryBoundaryIntent,
   adjacentCategoryId,
   categoryBoundaryDirection,
 } from "@/domain/categoryScroll";
@@ -50,5 +51,56 @@ describe("single-category boundary scrolling", () => {
       adjacentCategoryId(categoryIds, "learning", "next"),
     ).toBeUndefined();
     expect(adjacentCategoryId(categoryIds, "missing", "next")).toBeUndefined();
+  });
+
+  it("requires a separate confirmed gesture after reaching a boundary", () => {
+    const first = advanceCategoryBoundaryIntent(
+      undefined,
+      "next",
+      120,
+      1_000,
+    );
+    expect(first.confirmed).toBe(false);
+    expect(first.state.phase).toBe("waiting");
+
+    const inertia = advanceCategoryBoundaryIntent(
+      first.state,
+      "next",
+      90,
+      1_050,
+    );
+    expect(inertia.confirmed).toBe(false);
+    expect(inertia.state.phase).toBe("waiting");
+
+    const secondGesture = advanceCategoryBoundaryIntent(
+      inertia.state,
+      "next",
+      120,
+      1_250,
+    );
+    expect(secondGesture.confirmed).toBe(true);
+    expect(secondGesture.state.phase).toBe("confirming");
+  });
+
+  it("resets boundary confirmation when the scroll direction changes", () => {
+    const first = advanceCategoryBoundaryIntent(
+      undefined,
+      "next",
+      120,
+      1_000,
+    );
+    const reversed = advanceCategoryBoundaryIntent(
+      first.state,
+      "previous",
+      -120,
+      1_300,
+    );
+
+    expect(reversed.confirmed).toBe(false);
+    expect(reversed.state).toMatchObject({
+      direction: "previous",
+      phase: "waiting",
+      accumulatedDelta: 0,
+    });
   });
 });

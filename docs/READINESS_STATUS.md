@@ -35,9 +35,12 @@ ImageGen 生成的新素材，原文件移入项目外私有归档。生成提�
 哈希、Content-Type、attribution 和 license 与本仓库生成记录一致；缺少当次 API 和对象
 证据时不得把线上背景库标记为 GO。
 
-## 仍需发布者决定
+## 当前公开里程碑与仍需发布者决定
 
-1. 正式 GitHub 账号/仓库名、产品新名称、官网域名和私密支持渠道。
+公开仓库 `zuogl/SmartAINewTab` 与官网 `https://smartainewtab.online` 已上线，Chrome Web
+Store 版本已提交审核。提交不代表审核通过或公开可安装，实时状态仍以商店后台和公开详情页为准。
+
+1. 是否启用并验证 GitHub Private vulnerability reporting 等真实可用的私密安全报告渠道。
 2. 是否批准下一轮 Cloudflare 生产变更、公开背景 R2 替换及随后
    Google OAuth/跨设备验收。
 

@@ -201,9 +201,68 @@ describe("bookmark health settings", () => {
       })),
     });
     await waitFor(
-      () => expect(consoleElement).toHaveTextContent("任务已结束，以上为完整请求日志"),
+      () => expect(consoleElement).toHaveTextContent("任务已完成：1/1，以上为完整请求日志"),
       { timeout: 2_500 },
     );
+  });
+
+  it("distinguishes an interrupted queue from a completed scan", async () => {
+    const now = Date.now();
+    await database.healthJobs.put({
+      id: "health-interrupted",
+      status: "failed",
+      scope: "all",
+      bookmarkIds: bookmarks.map((bookmark) => bookmark.id),
+      processed: 0,
+      failed: 1,
+      createdAt: now - 1_000,
+      updatedAt: now,
+      error: "unexpected failure",
+      items: [
+        {
+          bookmarkId: "first",
+          title: "First",
+          url: bookmarks[0]!.url,
+          status: "failed",
+          error: "unexpected failure",
+          requests: [],
+        },
+        {
+          bookmarkId: "second",
+          title: "Second",
+          url: bookmarks[1]!.url,
+          status: "queued",
+          requests: [],
+        },
+      ],
+    });
+
+    render(
+      <BookmarkHealthSettings
+        preferences={DEFAULT_BOOKMARK_HEALTH_PREFERENCES}
+        bookmarks={bookmarks}
+        workspace={buildWorkspaceFromBookmarks(bookmarks)}
+        onPreferencesChange={vi.fn()}
+        onOpenBookmark={vi.fn(async () => undefined)}
+        onUpdateBookmarkUrls={vi.fn(async () => undefined)}
+        onDeleteBookmarks={vi.fn(async () => undefined)}
+        onMergeDuplicates={vi.fn(async () => undefined)}
+        onRestoreSnapshot={vi.fn(async () => undefined)}
+      />,
+    );
+
+    const progress = await screen.findByLabelText("书签体检进度");
+    expect(progress).toHaveTextContent("任务中断");
+    expect(progress).toHaveTextContent("0/2");
+    expect(progress).toHaveTextContent("失败 1");
+    expect(progress).toHaveTextContent("待检测 1");
+    expect(progress).toHaveTextContent(
+      "任务中断：已完成 0/2，失败 1，剩余 1 个待检测",
+    );
+    expect(
+      within(progress).getByRole("button", { name: "继续剩余任务" }),
+    ).toBeInTheDocument();
+    expect(progress).not.toHaveTextContent("以上为完整请求日志");
   });
 
   it("automatically dismisses task status feedback", async () => {

@@ -20,6 +20,7 @@ exports/
 qa/
 design-qa*
 release/
+config/production-extension-public-key.txt
 .env*
 !.env.example
 /website/

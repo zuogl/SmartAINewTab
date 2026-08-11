@@ -198,6 +198,9 @@ export function BookmarkHealthSettings({
   const liveJob = jobs.find(
     (job) => job.status === "queued" || job.status === "running" || job.status === "paused",
   );
+  const recoverableFailedJob = jobs.find(
+    (job) => job.status === "failed" && healthJobPendingCount(job) > 0,
+  );
   const latestJob = jobs[0];
   const latestFullScanJob =
     latestJob?.summaryMode === "full-scan" &&
@@ -210,9 +213,10 @@ export function BookmarkHealthSettings({
   const overviewSummary = overviewFullScanJob
     ? summarizeBookmarkHealthRun(summary, overviewFullScanJob)
     : summary;
-  const displayedJob = liveJob ?? jobs[0];
+  const displayedJob = liveJob ?? recoverableFailedJob ?? jobs[0];
+  const displayedJobPending = displayedJob ? healthJobPendingCount(displayedJob) : 0;
   const progress = displayedJob?.items.length
-    ? Math.round(((displayedJob.processed + displayedJob.failed) / displayedJob.items.length) * 100)
+    ? Math.round((displayedJob.processed / displayedJob.items.length) * 100)
     : 0;
 
   useEffect(() => {
@@ -264,6 +268,27 @@ export function BookmarkHealthSettings({
       if (isFullScan) setRecords([]);
       await requestBookmarkHealthPump();
     }, "书签体检任务已加入后台队列");
+  }
+
+  async function continueScan(job: BookmarkHealthJob) {
+    const needsPermission = job.pauseReason === "host-permission";
+    await runAction(async () => {
+      if (needsPermission) {
+        const granted = await requestAllWebHostPermissions();
+        if (!granted) {
+          throw new Error("未重新获得网站访问权限，体检任务仍保持暂停");
+        }
+      }
+      await resumeBookmarkHealthJob(job.id);
+      await requestBookmarkHealthPump();
+    }, needsPermission ? "网站访问权限已恢复，体检任务已继续" : "体检任务已继续");
+  }
+
+  async function retryScan(job: BookmarkHealthJob) {
+    await runAction(async () => {
+      await retryBookmarkHealthJob(job.id);
+      await requestBookmarkHealthPump();
+    }, "失败项目与剩余项目已重新入队");
   }
 
   function updatePreferences(patch: Partial<BookmarkHealthPreferences>) {
@@ -478,7 +503,7 @@ export function BookmarkHealthSettings({
               <option value="all">{t("全部")}</option>
             </select>
           </label>
-          <button className="primary-button" type="button" disabled={busy || Boolean(liveJob)} onClick={() => void startScan()}>
+          <button className="primary-button" type="button" disabled={busy || Boolean(liveJob) || Boolean(recoverableFailedJob)} onClick={() => void startScan()}>
             <Play size={16} weight="fill" /> {t("开始体检")}
           </button>
         </div>
@@ -487,20 +512,25 @@ export function BookmarkHealthSettings({
           <div className={`health-job health-job-${displayedJob.status}`} aria-label={t("书签体检进度")}>
             <div className="health-job-heading">
               <span className="health-job-state"><span className="status-dot" />{healthJobStatusText(displayedJob)}</span>
-              <strong>{displayedJob.processed + displayedJob.failed}/{displayedJob.items.length}</strong>
+              <span className="health-job-count">
+                <strong>{displayedJob.processed}/{displayedJob.items.length}</strong>
+                <small>已完成/总数{displayedJob.failed > 0 ? ` · 失败 ${displayedJob.failed}` : ""}{displayedJobPending > 0 ? ` · 待检测 ${displayedJobPending}` : ""}</small>
+              </span>
             </div>
             <div className="health-progress"><span style={{ width: `${progress}%` }} /></div>
-            {liveJob?.id === displayedJob.id && (
+            {(liveJob?.id === displayedJob.id || recoverableFailedJob?.id === displayedJob.id) && (
               <div className="health-job-actions">
-                {liveJob.status === "paused" ? (
-                  <button type="button" onClick={() => void runAction(async () => { await resumeBookmarkHealthJob(liveJob.id); await requestBookmarkHealthPump(); }, "体检任务已继续")}><Play size={14} />{t("继续")}</button>
+                {displayedJob.status === "paused" ? (
+                  <button type="button" onClick={() => void continueScan(displayedJob)}><Play size={14} />{displayedJob.pauseReason === "host-permission" ? t("重新授权并继续") : t("继续")}</button>
+                ) : displayedJob.status === "failed" ? (
+                  <button type="button" onClick={() => void retryScan(displayedJob)}><ArrowClockwise size={14} />{t("继续剩余任务")}</button>
                 ) : (
-                  <button type="button" onClick={() => void runAction(() => pauseBookmarkHealthJob(liveJob.id), "体检任务已暂停")}><Pause size={14} />{t("暂停")}</button>
+                  <button type="button" onClick={() => void runAction(() => pauseBookmarkHealthJob(displayedJob.id), "体检任务已暂停")}><Pause size={14} />{t("暂停")}</button>
                 )}
-                <button type="button" onClick={() => void runAction(() => cancelBookmarkHealthJob(liveJob.id), "体检任务已取消")}><Stop size={14} />{t("取消")}</button>
+                <button type="button" onClick={() => void runAction(() => cancelBookmarkHealthJob(displayedJob.id), displayedJob.status === "failed" ? "已放弃剩余体检任务" : "体检任务已取消")}><Stop size={14} />{displayedJob.status === "failed" ? t("放弃剩余任务") : t("取消")}</button>
               </div>
             )}
-            <HealthLiveConsole job={displayedJob} live={liveJob?.id === displayedJob.id} />
+            <HealthLiveConsole job={displayedJob} />
           </div>
         )}
       </div>
@@ -679,7 +709,7 @@ export function BookmarkHealthSettings({
               <article key={job.id}>
                 <span className={`status-dot status-${job.status}`} />
                 <span><strong>{healthJobStatusText(job)}</strong><small>{new Date(job.createdAt).toLocaleString("zh-CN")} · {job.processed}/{job.items.length}</small></span>
-                {job.status === "failed" && <button type="button" onClick={() => void runAction(async () => { await retryBookmarkHealthJob(job.id); await requestBookmarkHealthPump(); }, "失败项目已重新入队")}>重试失败项</button>}
+                {job.status === "failed" && <button type="button" onClick={() => void retryScan(job)}>{healthJobPendingCount(job) > 0 ? "继续剩余任务" : "重试失败项"}</button>}
               </article>
             ))}
           </div>
@@ -780,7 +810,7 @@ function HealthRecordRow({ record, bookmark, workspace, actions }: { record: Boo
   );
 }
 
-function HealthLiveConsole({ job, live }: { job: BookmarkHealthJob; live: boolean }) {
+function HealthLiveConsole({ job }: { job: BookmarkHealthJob }) {
   const consoleRef = useRef<HTMLDivElement>(null);
   const followingLatestRef = useRef(true);
   const [followingLatest, setFollowingLatest] = useState(true);
@@ -832,7 +862,7 @@ function HealthLiveConsole({ job, live }: { job: BookmarkHealthJob; live: boolea
             <div><div className="console-message">{entry.message}</div>{entry.detail && <pre>{entry.detail}</pre>}</div>
           </div>
         ))}
-        <div className="console-entry console-live"><time>{formatHealthLogTime(live ? Date.now() : job.updatedAt)}</time><span className="console-symbol">›</span><div className="console-message">{live ? <>等待下一条输出<span className="console-cursor" /></> : "任务已结束，以上为完整请求日志"}</div></div>
+        <div className="console-entry console-live"><time>{formatHealthLogTime(job.status === "queued" || job.status === "running" ? Date.now() : job.updatedAt)}</time><span className="console-symbol">›</span><div className="console-message">{healthConsoleFooter(job)}</div></div>
       </div>
     </div>
   );
@@ -900,6 +930,34 @@ function formatHealthLogTime(value: number): string {
   return new Date(value).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function healthConsoleFooter(job: BookmarkHealthJob): React.ReactNode {
+  if (job.status === "queued" || job.status === "running") {
+    return <>等待下一条输出<span className="console-cursor" /></>;
+  }
+  const remaining = healthJobPendingCount(job);
+  const progress = `已完成 ${job.processed}/${job.items.length}`;
+  if (job.status === "paused") {
+    return job.pauseReason === "host-permission"
+      ? `任务等待网站授权：${progress}，剩余 ${remaining} 个待检测`
+      : `任务已暂停：${progress}，剩余 ${remaining} 个待检测`;
+  }
+  if (job.status === "cancelled") {
+    return `任务已取消：${progress}，剩余 ${remaining} 个未检测`;
+  }
+  if (job.status === "failed") {
+    return remaining > 0
+      ? `任务中断：${progress}，失败 ${job.failed}，剩余 ${remaining} 个待检测`
+      : `任务已处理完毕：${progress}，其中 ${job.failed} 个执行失败`;
+  }
+  return `任务已完成：${job.processed}/${job.items.length}，以上为完整请求日志`;
+}
+
+function healthJobPendingCount(job: BookmarkHealthJob): number {
+  return job.items.filter(
+    (item) => item.status === "queued" || item.status === "checking",
+  ).length;
+}
+
 function bookmarkLocation(workspace: WorkspaceLayout, bookmarkId: string): string {
   for (const category of workspace.categories) {
     if (category.bookmarkIds.includes(bookmarkId)) return `${category.title} / 未分组`;
@@ -942,6 +1000,12 @@ function healthStatusLabel(status: BookmarkHealthRecord["status"]) {
 }
 
 function healthJobStatusText(job: BookmarkHealthJob) {
+  if (job.status === "paused" && job.pauseReason === "host-permission") {
+    return "等待网站授权";
+  }
+  if (job.status === "failed" && healthJobPendingCount(job) > 0) {
+    return "任务中断";
+  }
   const labels: Record<BookmarkHealthJob["status"], string> = {
     queued: "等待检测",
     running: "正在检测",
@@ -956,7 +1020,11 @@ function healthJobStatusText(job: BookmarkHealthJob) {
 function fullScanOverviewLabel(job: BookmarkHealthJob) {
   if (job.status === "queued") return "本轮完整体检等待开始";
   if (job.status === "running") return "本轮完整体检进行中";
-  if (job.status === "paused") return "本轮完整体检已暂停";
+  if (job.status === "paused") {
+    return job.pauseReason === "host-permission"
+      ? "本轮完整体检等待网站授权"
+      : "本轮完整体检已暂停";
+  }
   if (job.status === "cancelled") return "本轮完整体检已取消，当前为部分统计";
   if (job.status === "failed") return "本轮完整体检未完成，当前为部分统计";
   return "本轮完整体检已完成";

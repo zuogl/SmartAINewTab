@@ -24,13 +24,14 @@ const packageDocument = JSON.parse(
   await readFile(path.join(ROOT, "package.json"), "utf8"),
 );
 const version = packageDocument.version;
+assertProductionVersion(version);
 const artifactDirectory = path.join(ARTIFACT_ROOT, version);
 const zipName = `SmartAINewTab-${version}-chrome-web-store.zip`;
 const zipPath = path.join(artifactDirectory, zipName);
 
 assertSafeArtifactPath(artifactDirectory);
 run("npm", ["run", "store-assets:generate"]);
-run("npm", ["run", "build"], { removeLocalReleaseFlag: true });
+run("npm", ["run", "build"], { removeLocalReleaseEnvironment: true });
 
 const builtManifest = await readJson(path.join(OUTPUT_DIR, "manifest.json"));
 if (builtManifest.version !== version) {
@@ -40,6 +41,9 @@ if (builtManifest.version !== version) {
 }
 if ("key" in builtManifest) {
   throw new Error("Production manifest must not contain the local development key");
+}
+if ("version_name" in builtManifest) {
+  throw new Error("Production manifest must not contain a local version_name");
 }
 await Promise.all([
   access(path.join(OUTPUT_DIR, "manifest.json")),
@@ -67,7 +71,11 @@ const archivedManifestText = run(
   { capture: true },
 );
 const archivedManifest = JSON.parse(archivedManifestText);
-if (archivedManifest.version !== version || "key" in archivedManifest) {
+if (
+  archivedManifest.version !== version ||
+  "key" in archivedManifest ||
+  "version_name" in archivedManifest
+) {
   throw new Error("Archived manifest failed version or production-key verification");
 }
 
@@ -108,6 +116,7 @@ const report = {
   uploadPackageBytes: zipStats.size,
   manifestAtZipRoot: true,
   manifestContainsDevelopmentKey: false,
+  manifestContainsDevelopmentVersionName: false,
   storeAssets: {
     icon: "assets/icon-128.png",
     screenshots: 5,
@@ -209,9 +218,37 @@ function assertSafeArtifactPath(directory) {
   }
 }
 
+function assertProductionVersion(productionVersion) {
+  const parts =
+    typeof productionVersion === "string" ? productionVersion.split(".") : [];
+  if (
+    parts.length !== 3 ||
+    parts.some(
+      (part) =>
+        !/^(0|[1-9]\d*)$/.test(part) ||
+        Number(part) < 0 ||
+        Number(part) > 65_535,
+    )
+  ) {
+    throw new Error(
+      `Chrome Web Store version must contain exactly three integers from 0 to 65535; received ${productionVersion}`,
+    );
+  }
+}
+
 function run(command, args, options = {}) {
   const environment = { ...process.env };
-  if (options.removeLocalReleaseFlag) delete environment.SMARTAINEWTAB_LOCAL_RELEASE;
+  if (options.removeLocalReleaseEnvironment) {
+    for (const name of [
+      "SMARTAINEWTAB_LOCAL_RELEASE",
+      "SMARTAINEWTAB_LOCAL_VERSION",
+      "SMARTAINEWTAB_LOCAL_VERSION_NAME",
+      "SMARTAINEWTAB_LOCAL_EXTENSION_KEY",
+      "SMARTAINEWTAB_PRODUCTION_PUBLIC_KEY",
+    ]) {
+      delete environment[name];
+    }
+  }
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? ROOT,
     env: environment,

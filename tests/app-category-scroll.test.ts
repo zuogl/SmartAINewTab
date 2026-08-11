@@ -16,7 +16,10 @@ import {
   createGroup,
   moveBookmarkInWorkspace,
 } from "@/domain/layout";
-import type { BookmarkRecord } from "@/domain/types";
+import {
+  CATEGORY_ICON_VALUES,
+  type BookmarkRecord,
+} from "@/domain/types";
 import { database } from "@/services/database";
 import type { AppRuntime } from "@/services/runtime";
 import { saveSettings, saveWorkspace } from "@/services/storage";
@@ -65,11 +68,23 @@ const runtime: AppRuntime = {
   notifyBackground: vi.fn(async () => undefined),
 };
 
+const CATEGORY_TEST_SETTINGS = {
+  ...DEFAULT_SETTINGS,
+  widgets: {
+    ...DEFAULT_SETTINGS.widgets,
+    enabled: false,
+  },
+};
+
 describe("App cross-category content", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     localStorage.clear();
-    await Promise.all([database.jobs.clear(), database.metadata.clear()]);
+    await Promise.all([
+      database.jobs.clear(),
+      database.metadata.clear(),
+      saveSettings(CATEGORY_TEST_SETTINGS),
+    ]);
     vi.stubGlobal(
       "requestAnimationFrame",
       (callback: FrameRequestCallback) => window.setTimeout(callback, 0),
@@ -146,6 +161,13 @@ describe("App cross-category content", () => {
 
     const scrollIntoView = vi.mocked(HTMLElement.prototype.scrollIntoView);
     scrollIntoView.mockClear();
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    fireEvent.wheel(viewport, { deltaY: 120 });
+    expect(initialRailButton).toHaveAttribute("aria-current", "true");
+    now.mockReturnValue(1_050);
+    fireEvent.wheel(viewport, { deltaY: 80 });
+    expect(initialRailButton).toHaveAttribute("aria-current", "true");
+    now.mockReturnValue(1_250);
     fireEvent.wheel(viewport, { deltaY: 120 });
 
     await waitFor(() => {
@@ -252,13 +274,18 @@ describe("App cross-category content", () => {
     const editor = await screen.findByRole("dialog", {
       name: "编辑大分类",
     });
-    expect(within(editor).getAllByRole("radio")).toHaveLength(20);
+    expect(within(editor).getAllByRole("radio")).toHaveLength(
+      CATEGORY_ICON_VALUES.length,
+    );
+    expect(
+      within(editor).getByRole("region", { name: "AI" }),
+    ).toBeInTheDocument();
     expect(within(editor).getByDisplayValue("工具")).toBeInTheDocument();
   });
 
   it("marks the category rail for right-edge reveal when it is not pinned", async () => {
     await saveSettings({
-      ...DEFAULT_SETTINGS,
+      ...CATEGORY_TEST_SETTINGS,
       screenDisplay: {
         ...DEFAULT_SETTINGS.screenDisplay,
         alwaysShowCategoryRail: false,
@@ -271,6 +298,117 @@ describe("App cross-category content", () => {
     expect(container.querySelector(".category-rail-reveal")).toHaveClass(
       "auto-hide",
     );
+  });
+
+  it("treats widgets as a separate first screen and hides them in category view", async () => {
+    await saveSettings({
+      ...DEFAULT_SETTINGS,
+      widgets: {
+        ...DEFAULT_SETTINGS.widgets,
+        enabled: true,
+        activeIds: ["bookmark-stats", "recent-bookmarks"],
+      },
+    });
+    const workspace = buildWorkspaceFromBookmarks(bookmarks);
+    await saveWorkspace(workspace);
+
+    const { container } = render(createElement(App, { runtime }));
+    const dashboard = await screen.findByLabelText("首屏小部件");
+    const widgetButton = screen.getByRole("button", { name: "小部件中心" });
+    const categoryButton = container.querySelector<HTMLButtonElement>(
+      `[data-rail-category-id="${workspace.categories[0]!.id}"]`,
+    )!;
+    const viewport = container.querySelector<HTMLElement>(
+      ".workspace-scroll-region",
+    )!;
+
+    expect(widgetButton).toHaveAttribute("aria-current", "true");
+    expect(categoryButton).not.toHaveAttribute("aria-current");
+    expect(container.querySelector("[data-category-section]")).toBeNull();
+    expect(widgetButton.nextElementSibling).toHaveClass("rail-widget-divider");
+
+    fireEvent.click(categoryButton);
+    await screen.findByLabelText("未分类书签与分组");
+    expect(dashboard).not.toBeInTheDocument();
+    expect(categoryButton).toHaveAttribute("aria-current", "true");
+    expect(container.querySelector(".widget-dashboard")).toBeNull();
+
+    fireEvent.click(widgetButton);
+    await screen.findByLabelText("首屏小部件");
+    expect(container.querySelector("[data-category-section]")).toBeNull();
+
+    fireEvent.wheel(viewport, { deltaY: 120 });
+    await screen.findByLabelText("未分类书签与分组");
+    expect(container.querySelector(".widget-dashboard")).toBeNull();
+    expect(categoryButton).toHaveAttribute("aria-current", "true");
+  });
+
+  it("renders groups and loose bookmarks in one mixed draggable order", async () => {
+    const workspace = buildWorkspaceFromBookmarks(bookmarks);
+    const category = workspace.categories[0]!;
+    const group = createGroup("常用");
+    category.groups.push(group);
+    moveBookmarkInWorkspace(
+      workspace,
+      "bookmark-two",
+      category.id,
+      group.id,
+    );
+    category.rootOrder = [group.id, "bookmark-one"];
+    await saveWorkspace(workspace);
+
+    const { container } = render(createElement(App, { runtime }));
+    await screen.findByLabelText("常用分组");
+    const items = Array.from(
+      container.querySelectorAll(
+        ".category-item-grid > [data-group-id], .category-item-grid > [data-bookmark-id]",
+      ),
+    );
+
+    expect(
+      items.map(
+        (item) =>
+          item.getAttribute("data-group-id") ??
+          item.getAttribute("data-bookmark-id"),
+      ),
+    ).toEqual([group.id, "bookmark-one"]);
+    expect(
+      container.querySelector("[data-group-id] .group-tile"),
+    ).toHaveAttribute("tabindex", "0");
+  });
+
+  it("hides an empty unclassified category and activates the first visible category", async () => {
+    const workspace = buildWorkspaceFromBookmarks(bookmarks);
+    const uncategorizedId = workspace.categories[0]!.id;
+    const tools = createCategory(
+      "工具",
+      workspace.categories.map((category) => category.icon),
+    );
+    workspace.categories.push(tools);
+    moveBookmarkInWorkspace(workspace, "bookmark-one", tools.id);
+    moveBookmarkInWorkspace(workspace, "bookmark-two", tools.id);
+    workspace.activeCategoryId = uncategorizedId;
+    await Promise.all([
+      saveWorkspace(workspace),
+      saveSettings({
+        ...CATEGORY_TEST_SETTINGS,
+        screenDisplay: {
+          ...DEFAULT_SETTINGS.screenDisplay,
+          showEmptyUncategorizedCategory: false,
+        },
+      }),
+    ]);
+
+    const { container } = render(createElement(App, { runtime }));
+
+    await screen.findByLabelText("工具书签与分组");
+    expect(screen.queryByLabelText("未分类书签与分组")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(`[data-rail-category-id="${uncategorizedId}"]`),
+    ).toBeNull();
+    expect(
+      container.querySelector(`[data-rail-category-id="${tools.id}"]`),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   it("lists evidence-matched search results and opens a grouped bookmark before highlighting it", async () => {
@@ -390,7 +528,7 @@ describe("App cross-category content", () => {
     await Promise.all([
       saveWorkspace(workspace),
       saveSettings({
-        ...DEFAULT_SETTINGS,
+        ...CATEGORY_TEST_SETTINGS,
         openInNewTab: false,
       }),
     ]);
@@ -433,7 +571,7 @@ describe("App cross-category content", () => {
     await Promise.all([
       saveWorkspace(workspace),
       saveSettings({
-        ...DEFAULT_SETTINGS,
+        ...CATEGORY_TEST_SETTINGS,
         openInNewTab: true,
       }),
     ]);

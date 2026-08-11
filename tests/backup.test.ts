@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/domain/constants";
-import { buildWorkspaceFromBookmarks } from "@/domain/layout";
+import {
+  buildWorkspaceFromBookmarks,
+  createGroup,
+  moveBookmarkInWorkspace,
+} from "@/domain/layout";
 import type { AppSettings, BookmarkRecord } from "@/domain/types";
 import {
   createBackupDocument,
@@ -88,6 +92,62 @@ describe("full backup and restore", () => {
       manualTags: ["手动"],
       tags: ["域名分析"],
     });
+  });
+
+  it("round-trips mixed group and loose-bookmark ordering", async () => {
+    const second: BookmarkRecord = {
+      ...original,
+      id: "old-second-id",
+      title: "Second",
+      url: "https://second.example.com/",
+    };
+    const layout = buildWorkspaceFromBookmarks([original, second]);
+    const category = layout.categories[0]!;
+    const group = createGroup("工具");
+    category.groups.push(group);
+    moveBookmarkInWorkspace(layout, second.id, category.id, group.id);
+    category.rootOrder = [original.id, group.id];
+    const backup = await createBackupDocument(
+      layout,
+      DEFAULT_SETTINGS,
+      [original, second],
+    );
+    const current = [
+      { ...original, id: "new-id", url: "https://example.com/tools" },
+      { ...second, id: "new-second-id" },
+    ];
+
+    const result = await restoreBackupDocument(
+      serializeBackup(backup),
+      current,
+      DEFAULT_SETTINGS,
+    );
+
+    expect(result.layout.categories[0]?.rootOrder).toEqual([
+      "new-id",
+      group.id,
+    ]);
+    expect(result.layout.categories[0]?.groups[0]?.bookmarkIds).toEqual([
+      "new-second-id",
+    ]);
+  });
+
+  it("round-trips newly expanded category icons", async () => {
+    const layout = buildWorkspaceFromBookmarks([original]);
+    layout.categories[0]!.icon = "robot";
+    const backup = await createBackupDocument(
+      layout,
+      DEFAULT_SETTINGS,
+      [original],
+    );
+
+    const result = await restoreBackupDocument(
+      serializeBackup(backup),
+      [original],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(result.layout.categories[0]?.icon).toBe("robot");
   });
 
   it("does not let imported endpoints retarget local credentials", async () => {
@@ -242,6 +302,7 @@ describe("full backup and restore", () => {
       showTime: true,
       showDailyQuote: false,
       alwaysShowCategoryRail: true,
+      showEmptyUncategorizedCategory: true,
       timeStyle: "minimal",
       showDate: true,
       showWeekday: true,

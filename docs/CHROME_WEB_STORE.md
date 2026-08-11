@@ -1,7 +1,9 @@
 # Chrome Web Store 提交材料
 
-更新日期：2026 年 8 月 8 日。正式提交前必须把下列 `<official-domain>` 和支持渠道替换为
-真实公开地址，并再次对照当时的 Chrome Web Store Dashboard 字段。
+更新日期：2026 年 8 月 8 日。Chrome Web Store 版本已经提交审核，官网与源代码仓库已经
+公开。提交不等于审核通过或公开上架；在 Dashboard 明确显示已发布并能从公开详情页安装前，
+不得把商店版本描述为公开可用，也不得提供未经验证的商店安装链接。Dashboard 中的字段和
+发行范围仍应以发布者当前看到的实时状态为准。
 
 可直接复制到 Dashboard 的五语文案、字段说明和审核备注分别位于：
 
@@ -74,10 +76,13 @@ Limited Use 声明：
 
 ## 公开链接
 
-- Privacy policy：`https://<official-domain>/privacy`
-- Terms：`https://<official-domain>/terms`
-- Support：`https://<official-domain>/support`
-- Account deletion：`https://<official-domain>/account-deletion`
+- Homepage：`https://smartainewtab.online/`
+- Privacy policy：`https://smartainewtab.online/privacy`
+- Terms：`https://smartainewtab.online/terms`
+- Support：`https://smartainewtab.online/support`
+- Account deletion：`https://smartainewtab.online/account-deletion`
+- Source repository：`https://github.com/zuogl/SmartAINewTab`
+- Public issue tracker：`https://github.com/zuogl/SmartAINewTab/issues`
 
 ## 素材规格
 
@@ -90,9 +95,15 @@ Limited Use 声明：
 截图不得包含真实邮箱、API Key、Token、恢复密码或私人书签；同时不得把未完成的云同步
 写成已经向所有用户开放。
 
-生产上传 ZIP 必须把 `manifest.json` 放在压缩包根目录，不得包含本地开发版本使用的固定
-`key` 字段。使用 `npm run cws:package` 生成并核验，不要直接上传
-`release/SmartAINewTab-local-extension`。
+生产上传 ZIP 必须把 `manifest.json` 放在压缩包根目录，只使用 `package.json` 中的三段
+正式版本，不得包含本地开发或生产 ID 验收使用的固定 `key`、第四段开发构建号或开发
+`version_name`。使用 `npm run cws:package` 生成并核验，不要直接上传
+`release/SmartAINewTab-local-extension` 或
+`release/SmartAINewTab-production-id-qa-extension`。
+
+日常开发包与生产 ID 验收包必须保持两个独立入口。生产 ID 验收包只允许在独立 Chrome
+Profile 中使用，并必须由 Dashboard 的公开公钥计算验证 ID
+`hdajgpnnncgdddpjbdggaochnbgpfngl`；公钥不是私钥，不得以任何形式保存或提交商店签名私钥。
 
 ## 审核备注建议
 

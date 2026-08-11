@@ -10,6 +10,18 @@ SmartAINewTab 的单一用途是帮助用户搜索、整理、维护和备份自
 
 ## 1. 处理的数据
 
+### 官网访问分析
+
+官方网站加载托管在 `https://plausible.shipsolo.io` 的 Plausible 脚本，用于统计官网的
+页面访问、来源、浏览器、操作系统、设备类型、大致国家或地区，以及发生时的外链点击、
+文件下载和表单提交。该脚本不读取 Chrome 扩展存储，也不会发送书签、Provider API Key、
+Google 登录资料、恢复密码或云备份内容。
+
+Plausible 不设置分析 Cookie，也不使用浏览器 localStorage 建立持久访客标识。与所有 HTTPS
+请求一样，Plausible 服务在传输时会接收 IP 地址和 User-Agent；其标准处理方式使用每日轮换
+的盐生成短期聚合标识，不保存原始 IP 或 User-Agent。详细机制见
+[Plausible Data Policy](https://plausible.io/data-policy)。
+
 ### Chrome 书签和扩展内数据
 
 扩展通过 `bookmarks` 权限读取 Chrome 书签的 ID、标题、URL、父目录和目录路径、
@@ -102,6 +114,7 @@ D1 的 Time Travel 灾难恢复副本按 Cloudflare 套餐最多保留 7 天（F
 ## 5. Cookie 使用边界和书签体检
 
 - SmartAINewTab 扩展和官网不设置广告、分析或用户画像 Cookie。
+- 官网 Plausible 统计不写入 Cookie 或 localStorage；手动语言选择仍使用一个功能性语言 Cookie。
 - 页面 `head`、网络小组件和普通/自动书签体检使用 `credentials: "omit"`。
 - favicon 请求与页面 `head` 请求相同，均明确使用 `credentials: "omit"`，不会携带登录 Cookie。
 - Google 登录页使用 Google 自己的登录 Cookie；SmartAINewTab 不读取该 Cookie。
@@ -118,6 +131,7 @@ SmartAINewTab 仅在提供用户选择的功能所必需时向以下接收方传
 - 用户选择的 AI Provider：接收第 2 节列出的 AI 请求数据和 API Key；
 - Google：处理用户主动发起的 OAuth 登录；
 - Cloudflare：托管 Worker、D1、R2、错误日志和官网；
+- Plausible（`plausible.shipsolo.io`）：处理官网聚合访问、外链点击、文件下载和表单提交事件；
 - 书签目标网站：接收 favicon、页面 `head` 或体检请求；
 - 小组件数据源：接收对应公开 API 请求，例如用户选择的天气城市或汇率参数。
 

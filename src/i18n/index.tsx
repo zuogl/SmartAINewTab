@@ -57,6 +57,9 @@ const EN_MESSAGES = {
   "始终显示右侧一级分类": "Always show the category rail",
   "关闭后分类栏隐藏，鼠标移动到屏幕最右侧时立即显示":
     "When off, the rail appears only when the pointer reaches the right edge.",
+  "显示空的“未分类”分类": "Show an empty Uncategorized category",
+  "关闭后，当未分类书签为 0 时隐藏；新增未分类书签后自动显示。":
+    "When off, Uncategorized is hidden at zero bookmarks and reappears automatically when a new uncategorized bookmark is added.",
   "有未保存的更改": "Unsaved changes",
   "所有更改已保存": "All changes saved",
   "正在保存…": "Saving…",
@@ -317,6 +320,9 @@ const EN_MESSAGES = {
   "开始体检": "Start check",
   "书签体检进度": "Bookmark health progress",
   "继续": "Resume",
+  "重新授权并继续": "Reauthorize and resume",
+  "继续剩余任务": "Resume remaining tasks",
+  "放弃剩余任务": "Discard remaining tasks",
   "暂停": "Pause",
   "定期自动体检": "Scheduled health checks",
   "开启时申请网站访问权限，仅在到期时检测未检查或过期的结果":

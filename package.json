@@ -13,6 +13,7 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "backgrounds:check": "node scripts/check-background-assets.mjs",
+    "versioning:check": "node scripts/check-versioning.mjs",
     "screenshots:capture": "node scripts/capture-product-shots.mjs",
     "store-assets:generate": "node scripts/generate-store-assets.mjs",
     "cws:package": "node scripts/build-cws-submission.mjs",
@@ -22,8 +23,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "check": "npm run public:check && npm run backgrounds:check && npm run notices:check && npm run typecheck && npm run test:run && npm run build",
+    "check": "npm run public:check && npm run backgrounds:check && npm run notices:check && npm run versioning:check && npm run typecheck && npm run test:run && npm run build",
     "release:local": "node scripts/build-local-extension.mjs",
+    "release:production-id": "node scripts/build-local-extension.mjs --identity=production",
     "check:worker": "npm --prefix worker run check",
     "check:all": "npm run check && npm run check:worker"
   },

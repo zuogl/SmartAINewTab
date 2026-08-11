@@ -80,16 +80,26 @@ export async function enqueueBookmarkHealthJob(
   const [records, activeJobs, settings] = await Promise.all([
     database.health.bulkGet(bookmarks.map((bookmark) => bookmark.id)),
     database.healthJobs
-      .filter((job) => job.status === "queued" || job.status === "running")
+      .filter(
+        (job) =>
+          job.status === "queued" ||
+          job.status === "running" ||
+          job.status === "paused" ||
+          job.status === "failed",
+      )
       .toArray(),
     loadSettings(),
   ]);
   const queuedIds = new Set(
-    activeJobs.flatMap((job) =>
-      job.items
-        .filter((item) => item.status === "queued" || item.status === "checking")
-        .map((item) => item.bookmarkId),
-    ),
+    activeJobs.flatMap((job) => {
+      const hasPendingItems = job.items.some(
+        (item) => item.status === "queued" || item.status === "checking",
+      );
+      if (!hasPendingItems) return [];
+      return job.items
+        .filter((item) => item.status !== "completed")
+        .map((item) => item.bookmarkId);
+    }),
   );
   const staleBefore =
     now - settings.bookmarkHealth.staleAfterDays * DAY_MS;
@@ -148,6 +158,8 @@ export async function pauseBookmarkHealthJob(id: string): Promise<void> {
   if (!job || (job.status !== "queued" && job.status !== "running")) return;
   await database.healthJobs.update(id, {
     status: "paused",
+    pauseReason: "user",
+    error: undefined,
     leaseUntil: 0,
     updatedAt: Date.now(),
   });
@@ -158,6 +170,7 @@ export async function resumeBookmarkHealthJob(id: string): Promise<void> {
   if (!job || (job.status !== "paused" && job.status !== "failed")) return;
   await database.healthJobs.update(id, {
     status: "queued",
+    pauseReason: undefined,
     leaseUntil: 0,
     error: undefined,
     updatedAt: Date.now(),
@@ -167,6 +180,7 @@ export async function resumeBookmarkHealthJob(id: string): Promise<void> {
 export async function cancelBookmarkHealthJob(id: string): Promise<void> {
   await database.healthJobs.update(id, {
     status: "cancelled",
+    pauseReason: undefined,
     leaseUntil: 0,
     updatedAt: Date.now(),
   });
@@ -182,6 +196,7 @@ export async function retryBookmarkHealthJob(id: string): Promise<void> {
   );
   await database.healthJobs.update(id, {
     status: "queued",
+    pauseReason: undefined,
     processed: items.filter((item) => item.status === "completed").length,
     failed: 0,
     items,
@@ -423,10 +438,21 @@ async function runNextBookmarkHealthJobWithLease(): Promise<boolean> {
   });
 
   try {
-    if (!(await hasHostPermission(item.url))) {
-      throw new Error(
-        "未授权访问该网站，请在书签体检中重新开始任务或手动复检",
+    if (safePublicHttpUrl(item.url) && !(await hasHostPermission(item.url))) {
+      const queuedItems = checkingItems.map((candidate) =>
+        candidate.bookmarkId === item.bookmarkId
+          ? { ...candidate, status: "queued" as const }
+          : candidate,
       );
+      await database.healthJobs.update(job.id, {
+        status: "paused",
+        pauseReason: "host-permission",
+        items: queuedItems,
+        error: "网站访问权限已失效，请重新授权后继续体检",
+        leaseUntil: 0,
+        updatedAt: Date.now(),
+      });
+      return hasRunnableHealthJob();
     }
     const [previous, settings] = await Promise.all([
       database.health.get(item.bookmarkId),
@@ -459,6 +485,7 @@ async function runNextBookmarkHealthJobWithLease(): Promise<boolean> {
     const done = processed + failed >= completedItems.length;
     await database.healthJobs.update(job.id, {
       status: done ? (failed > 0 ? "failed" : "completed") : "queued",
+      pauseReason: undefined,
       items: completedItems,
       processed,
       failed,
@@ -481,6 +508,7 @@ async function runNextBookmarkHealthJobWithLease(): Promise<boolean> {
     );
     await database.healthJobs.update(job.id, {
       status: "failed",
+      pauseReason: undefined,
       items: failedItems,
       processed: failedItems.filter((candidate) => candidate.status === "completed").length,
       failed: failedItems.filter((candidate) => candidate.status === "failed").length,

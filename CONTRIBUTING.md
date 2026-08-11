@@ -25,8 +25,9 @@ npm --prefix website test
 ```
 
 仓库维护者在完成实际改动后还会运行 `npm run release:local`，生成经过完整检查的本地
-可加载扩展。外部贡献者不需要为提交 PR 而递增版本或提交 `release/`、`.output/`、
-`dist/` 等构建产物。
+可加载扩展并自动递增 `development-build.json` 的开发构建号。该过程不会改写
+`package.json` 中的 Chrome Web Store 正式版本。外部贡献者不需要为提交 PR 而递增任何
+版本或提交 `release/`、`.output/`、`dist/` 等构建产物。
 
 ## 提交原则
 

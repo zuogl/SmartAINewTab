@@ -7,10 +7,10 @@
 
 - [x] 使用 Apache-2.0，并添加根目录 `LICENSE` 与 `NOTICE`。
 - [x] 用本项目生成素材替换五张权属不明的 WebP，并记录提示词、源/发布哈希与转换参数。
-- [ ] 确认公开仓库名称、组织/个人账号和支持渠道。
+- [x] 确认公开仓库为 `zuogl/SmartAINewTab`，普通问题使用 GitHub Issues。
 - [x] 运行 secret、私人导出、截图、缓存和大文件扫描。
 - [x] 运行扩展、Worker、官网完整 CI。
-- [ ] 初始化根 Git 历史，创建私有远端做最后审查，再切换为 public。
+- [x] 根仓库已经公开；后续发布继续执行 secret、隐私数据和构建产物边界检查。
 - [ ] 开启 GitHub Private vulnerability reporting 和 Dependabot alerts。
 
 ## 2. Cloudflare 与 Google OAuth
@@ -27,7 +27,7 @@
 
 ## 3. 官网与公开政策
 
-- [ ] 绑定正式 HTTPS 域名并发布 `/privacy`、`/terms`、`/support`、
+- [x] 绑定正式 HTTPS 域名并发布 `/privacy`、`/terms`、`/support`、
       `/account-deletion`。
 - [ ] 在正式域名逐页检查状态码、移动端、链接、metadata 和无障碍。
 - [ ] 支持页面提供真实可用的私密联系渠道。
@@ -35,6 +35,8 @@
 
 ## 4. Chrome Web Store
 
+- [x] 正式版本与开发构建号已拆分；本地发布不再改写 Chrome Web Store 三段版本。
+- [x] 日常开发 ID 与生产 ID 验收入口、目录和校验相互隔离。
 - [x] 生成不含开发 `key` 的生产 zip，并核对版本高于已发布版本。
 - [x] manifest 中只有 `bookmarks`、`storage`、`alarms`、`favicon`、`identity`，网站
       访问只出现在 `optional_host_permissions`。
@@ -44,4 +46,5 @@
       Limited Use、远程代码、支持和隐私字段。
 - [ ] 使用全新 Chrome 配置文件安装上传包，走完首次权限、无 Key 本地功能、按需授权、
       拒绝授权、撤销授权、Google 登录和账户删除流程。
-- [ ] 最后确认开发者联系邮箱、发行范围和隐私字段，再提交审核。
+- [x] 已向 Chrome Web Store 提交审核。
+- [ ] 跟踪审核、发行范围和公开上架状态；确认公开详情页可安装前不得宣称已上架。

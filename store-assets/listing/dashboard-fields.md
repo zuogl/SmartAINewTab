@@ -1,7 +1,8 @@
 # Chrome Web Store Dashboard fields
 
-Do not submit until every `<REQUIRED_...>` placeholder is replaced and checked in the live
-Developer Dashboard.
+Submission status on 2026-08-08: submitted for Chrome Web Store review. Submission does not mean
+approval or public availability. Re-check every field and the live distribution state in the
+Developer Dashboard before describing the extension as published.
 
 ## Store listing
 
@@ -10,9 +11,9 @@ Developer Dashboard.
 - Additional locales: `en`, `zh_TW`, `ja`, `ko`
 - Category: `Productivity`
 - Mature content: `No`
-- Homepage URL: `https://<REQUIRED_OFFICIAL_DOMAIN>/`
-- Support URL: `https://<REQUIRED_OFFICIAL_DOMAIN>/support`
-- Privacy policy URL: `https://<REQUIRED_OFFICIAL_DOMAIN>/privacy`
+- Homepage URL: `https://smartainewtab.online/`
+- Support URL: `https://smartainewtab.online/support`
+- Privacy policy URL: `https://smartainewtab.online/privacy`
 - Official URL: select the verified Search Console property for the same HTTPS domain
 - Global store icon: `icons/icon-128.png`
 - Global screenshots, in order: `01-home.png`, `02-search.png`, `03-command.png`,
@@ -104,15 +105,15 @@ Certify only after comparing the live checkboxes with the published privacy poli
 
 ## Distribution
 
-- Recommended first submission while OAuth/cloud restore is not production-accepted: `Trusted testers`.
-- Public distribution: choose only after the official HTTPS policy URLs, support channel, production
-  OAuth allowlist, and two-profile cloud restore/deletion acceptance are complete.
+- Current submission distribution: read it from the live Dashboard; the repository does not infer it.
+- Public distribution: describe it as available only after the Dashboard confirms approval/publication
+  and the public listing can be opened and installed.
 - Regions: all regions, unless the publisher intentionally limits the initial beta.
 - Publishing: use deferred publishing so approval does not make the item public automatically.
 
 ## Required publisher input
 
-- `<REQUIRED_OFFICIAL_DOMAIN>` and verified Search Console ownership;
+- Reconfirm Search Console ownership for `https://smartainewtab.online/` in the live Dashboard;
 - Developer contact email entered in the Dashboard;
 - Public or private support channel that can actually receive user requests;
 - Trader/non-trader declaration and any address fields required for the publisher's jurisdiction;

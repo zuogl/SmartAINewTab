@@ -38,6 +38,7 @@ import {
   Plus,
   PlusCircle,
   Sparkle,
+  SquaresFour,
   Trash,
   WarningCircle,
   X,
@@ -59,8 +60,10 @@ import {
 import { DEFAULT_SETTINGS, SEARCH_ENGINES } from "@/domain/constants";
 import { classicQuoteForDate } from "@/domain/classicQuotes";
 import {
+  advanceCategoryBoundaryIntent,
   adjacentCategoryId,
   categoryBoundaryDirection,
+  type CategoryBoundaryIntentState,
 } from "@/domain/categoryScroll";
 import {
   BOOKMARK_GROUP_DWELL_MS,
@@ -74,13 +77,19 @@ import {
   createCategory,
   createGroup,
   createGroupFromBookmarkDrop,
+  dissolveGroupInCategory,
   getCategoryBookmarkIds,
+  getCategoryRootOrder,
   lockBookmarkPlacement,
   moveBookmarkInWorkspace,
   moveBookmarkRelativeInWorkspace,
+  moveBookmarkRelativeToRootItemInWorkspace,
+  moveGroupInWorkspace,
   removeBookmarkFromWorkspace,
   reconcileWorkspace,
+  syncWorkspaceRootOrders,
   UNCATEGORIZED_CATEGORY_ID,
+  visibleCategoriesForDisplay,
 } from "@/domain/layout";
 import {
   BOOKMARK_COMMAND_EXAMPLES,
@@ -177,7 +186,11 @@ import {
   BookmarkIcon,
   hasStaticBookmarkIcon,
 } from "./BookmarkIcon";
-import { CATEGORY_ICON_OPTIONS, CategoryGlyph } from "./icons";
+import {
+  CATEGORY_ICON_GROUPS,
+  CATEGORY_ICON_OPTIONS,
+  CategoryGlyph,
+} from "./icons";
 import { FaviconLoadStatus } from "./FaviconLoadStatus";
 import { Modal } from "./Modal";
 import { SettingsPanel, type SettingsSectionId } from "./SettingsPanel";
@@ -279,6 +292,8 @@ interface PendingCategoryNavigation {
   behavior: ScrollBehavior;
 }
 
+type WorkspaceView = "widgets" | "category";
+
 interface CategoryHoverLabel {
   title: string;
   top: number;
@@ -286,7 +301,8 @@ interface CategoryHoverLabel {
 }
 
 interface BookmarkDropPreview {
-  bookmarkId: string;
+  targetId: string;
+  targetType: "bookmark" | "group";
   categoryId: string;
   groupId?: string;
   intent: BookmarkDropIntent;
@@ -407,7 +423,9 @@ export function App({ runtime }: AppProps) {
     useState<FaviconLoadProgress>();
   const [toast, setToast] = useState("");
   const [now, setNow] = useState(() => new Date());
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("widgets");
   const [draggedBookmark, setDraggedBookmark] = useState<BookmarkRecord>();
+  const [draggedGroup, setDraggedGroup] = useState<BookmarkGroup>();
   const [bookmarkDropPreview, setBookmarkDropPreview] =
     useState<BookmarkDropPreview>();
   const [categoryHoverLabel, setCategoryHoverLabel] =
@@ -428,6 +446,8 @@ export function App({ runtime }: AppProps) {
     useRef<PendingCategoryNavigation | undefined>(undefined);
   const categoryWheelUnlockTimerRef = useRef<number | undefined>(undefined);
   const categoryWheelLockedRef = useRef(false);
+  const categoryBoundaryIntentRef =
+    useRef<CategoryBoundaryIntentState | undefined>(undefined);
   const initialCategoryScrollDoneRef = useRef(false);
   const backgroundLibraryRef = useRef<{ revoke(): void } | undefined>(undefined);
   const backgroundRotationInitializedRef = useRef(false);
@@ -437,6 +457,44 @@ export function App({ runtime }: AppProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const visibleCategories = useMemo(
+    () =>
+      visibleCategoriesForDisplay(
+        workspace?.categories ?? [],
+        settings.screenDisplay.showEmptyUncategorizedCategory,
+      ),
+    [
+      settings.screenDisplay.showEmptyUncategorizedCategory,
+      workspace?.categories,
+    ],
+  );
+  const activeCategory =
+    visibleCategories.find(
+      (category) => category.id === workspace?.activeCategoryId,
+    ) ?? visibleCategories[0];
+  const activeCategoryId = activeCategory?.id;
+  const showWidgetHome =
+    settings.widgets.enabled && workspaceView === "widgets";
+
+  useEffect(() => {
+    if (
+      !workspace ||
+      !activeCategoryId ||
+      workspace.activeCategoryId === activeCategoryId
+    ) {
+      return;
+    }
+    setWorkspace((current) => {
+      if (!current || current.activeCategoryId === activeCategoryId) {
+        return current;
+      }
+      return {
+        ...current,
+        activeCategoryId,
+        updatedAt: Date.now(),
+      };
+    });
+  }, [activeCategoryId, workspace]);
 
   useEffect(
     () => () => {
@@ -648,8 +706,10 @@ export function App({ runtime }: AppProps) {
   }, [toast]);
 
   useEffect(() => {
-    if (!workspace || initialCategoryScrollDoneRef.current) return;
-    if (workspace.activeCategoryId === workspace.categories[0]?.id) {
+    if (!workspace || showWidgetHome || initialCategoryScrollDoneRef.current) {
+      return;
+    }
+    if (!activeCategoryId || activeCategoryId === visibleCategories[0]?.id) {
       initialCategoryScrollDoneRef.current = true;
       return;
     }
@@ -657,15 +717,15 @@ export function App({ runtime }: AppProps) {
       initialCategoryScrollDoneRef.current = true;
       findCategorySection(
         appShellRef.current,
-        workspace.activeCategoryId,
+        activeCategoryId,
       )?.scrollIntoView({ block: "start" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [workspace]);
+  }, [activeCategoryId, showWidgetHome, visibleCategories, workspace]);
 
   useEffect(() => {
-    const categoryId = workspace?.activeCategoryId;
-    if (!categoryId) return;
+    const categoryId = activeCategoryId;
+    if (!categoryId || showWidgetHome) return;
     const frame = window.requestAnimationFrame(() => {
       const rail = appShellRef.current?.querySelector<HTMLElement>(
         ".rail-categories",
@@ -696,12 +756,18 @@ export function App({ runtime }: AppProps) {
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [workspace?.activeCategoryId]);
+  }, [activeCategoryId, showWidgetHome]);
 
   useEffect(() => {
-    const categoryId = workspace?.activeCategoryId;
+    const categoryId = activeCategoryId;
     const pending = pendingCategoryNavigationRef.current;
-    if (!categoryId || pending?.categoryId !== categoryId) return;
+    if (
+      showWidgetHome ||
+      !categoryId ||
+      pending?.categoryId !== categoryId
+    ) {
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       findCategorySection(appShellRef.current, categoryId)?.scrollIntoView({
         behavior: pending.behavior,
@@ -717,7 +783,7 @@ export function App({ runtime }: AppProps) {
       }, 260);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [workspace?.activeCategoryId]);
+  }, [activeCategoryId, showWidgetHome]);
 
   useEffect(
     () => () => {
@@ -796,10 +862,6 @@ export function App({ runtime }: AppProps) {
     };
   }, [faviconTargetKey, runtime]);
 
-  const activeCategory =
-    workspace?.categories.find(
-      (category) => category.id === workspace.activeCategoryId,
-    ) ?? workspace?.categories[0];
   const activeEngine =
     SEARCH_ENGINES.find((engine) => engine.id === settings.engineId) ??
     SEARCH_ENGINES[0]!;
@@ -810,7 +872,7 @@ export function App({ runtime }: AppProps) {
     ) ?? backgroundAssets[0] ?? BUILTIN_BACKGROUNDS[0]!;
   const dailyQuote = classicQuoteForDate(now);
 
-  if (!workspace || !activeCategory) {
+  if (!workspace) {
     return (
       <main className="app-shell app-loading">
         <Sparkle size={25} weight="duotone" />
@@ -824,13 +886,33 @@ export function App({ runtime }: AppProps) {
       if (!current) return current;
       const next = structuredClone(current);
       updater(next);
+      syncWorkspaceRootOrders(next);
       next.updatedAt = Date.now();
       return next;
     });
   }
 
+  function showWidgetsHome() {
+    if (!settings.widgets.enabled) return;
+    categoryBoundaryIntentRef.current = undefined;
+    pendingCategoryNavigationRef.current = undefined;
+    categoryWheelLockedRef.current = false;
+    if (categoryWheelUnlockTimerRef.current !== undefined) {
+      window.clearTimeout(categoryWheelUnlockTimerRef.current);
+      categoryWheelUnlockTimerRef.current = undefined;
+    }
+    setExpandedGroup(undefined);
+    setWorkspaceView("widgets");
+    window.requestAnimationFrame(() => {
+      if (categoryViewportRef.current) {
+        categoryViewportRef.current.scrollTop = 0;
+      }
+    });
+  }
+
   function scrollToCategory(categoryId: string) {
-    if (categoryId === workspace!.activeCategoryId) {
+    categoryBoundaryIntentRef.current = undefined;
+    if (!showWidgetHome && categoryId === activeCategoryId) {
       findCategorySection(appShellRef.current, categoryId)?.scrollIntoView({
         behavior: "smooth",
         block: "start",
@@ -842,9 +924,12 @@ export function App({ runtime }: AppProps) {
       block: "start",
       behavior: "smooth",
     };
-    updateWorkspace((next) => {
-      next.activeCategoryId = categoryId;
-    });
+    setWorkspaceView("category");
+    if (categoryId !== activeCategoryId) {
+      updateWorkspace((next) => {
+        next.activeCategoryId = categoryId;
+      });
+    }
   }
 
   function handleCategoryViewportWheel(event: ReactWheelEvent<HTMLElement>) {
@@ -861,9 +946,30 @@ export function App({ runtime }: AppProps) {
       return;
     }
     const shell = categoryViewportRef.current;
+    if (showWidgetHome) {
+      if (event.deltaY < 0 || !shell) return;
+      const firstCategoryId = visibleCategories[0]?.id;
+      if (!firstCategoryId) return;
+      event.preventDefault();
+      categoryBoundaryIntentRef.current = undefined;
+      categoryWheelLockedRef.current = true;
+      pendingCategoryNavigationRef.current = {
+        categoryId: firstCategoryId,
+        block: "start",
+        behavior: "auto",
+      };
+      setWorkspaceView("category");
+      if (currentWorkspace.activeCategoryId !== firstCategoryId) {
+        updateWorkspace((next) => {
+          next.activeCategoryId = firstCategoryId;
+        });
+      }
+      return;
+    }
+    if (!activeCategoryId) return;
     const section = findCategorySection(
       shell,
-      currentWorkspace.activeCategoryId,
+      activeCategoryId,
     );
     if (!shell || !section) return;
     const direction = categoryBoundaryDirection(
@@ -871,10 +977,22 @@ export function App({ runtime }: AppProps) {
       shell.getBoundingClientRect(),
       event.deltaY,
     );
-    if (!direction) return;
+    if (!direction) {
+      categoryBoundaryIntentRef.current = undefined;
+      return;
+    }
+    const boundaryIntent = advanceCategoryBoundaryIntent(
+      categoryBoundaryIntentRef.current,
+      direction,
+      event.deltaY,
+      Date.now(),
+    );
+    categoryBoundaryIntentRef.current = boundaryIntent.state;
+    if (!boundaryIntent.confirmed) return;
+    categoryBoundaryIntentRef.current = undefined;
     const categoryId = adjacentCategoryId(
-      currentWorkspace.categories.map((category) => category.id),
-      currentWorkspace.activeCategoryId,
+      visibleCategories.map((category) => category.id),
+      activeCategoryId,
       direction,
     );
     if (!categoryId) return;
@@ -891,6 +1009,8 @@ export function App({ runtime }: AppProps) {
 
   function focusSearchHit(hit: SearchResolution["hits"][number]) {
     if (!hit.categoryId) return;
+    setWorkspaceView("category");
+    categoryBoundaryIntentRef.current = undefined;
     const category = workspace!.categories.find(
       (item) => item.id === hit.categoryId,
     );
@@ -1451,6 +1571,7 @@ export function App({ runtime }: AppProps) {
       next.categories.push(category);
       next.activeCategoryId = category.id;
     });
+    setWorkspaceView("category");
     setCategoryEditor(undefined);
     window.requestAnimationFrame(() => {
       findCategorySection(appShellRef.current, category.id)?.scrollIntoView({
@@ -1487,8 +1608,7 @@ export function App({ runtime }: AppProps) {
     updateWorkspace((next) => {
       const target = next.categories.find((item) => item.id === categoryId);
       if (!target) return;
-      target.bookmarkIds.push(...group.bookmarkIds);
-      target.groups = target.groups.filter((item) => item.id !== group.id);
+      dissolveGroupInCategory(target, group.id);
     });
     if (expandedGroup?.groupId === group.id) setExpandedGroup(undefined);
     setToast("分组已删除，书签已移出到大分类");
@@ -1497,7 +1617,8 @@ export function App({ runtime }: AppProps) {
   function applyBookmarkDropPreview(next?: BookmarkDropPreview) {
     bookmarkDropPreviewRef.current = next;
     setBookmarkDropPreview((current) =>
-      current?.bookmarkId === next?.bookmarkId &&
+      current?.targetId === next?.targetId &&
+      current?.targetType === next?.targetType &&
       current?.categoryId === next?.categoryId &&
       current?.groupId === next?.groupId &&
       current?.intent === next?.intent
@@ -1535,7 +1656,7 @@ export function App({ runtime }: AppProps) {
     if (
       !activeIsBookmark ||
       !event.over ||
-      overData?.type !== "bookmark" ||
+      (overData?.type !== "bookmark" && overData?.type !== "group") ||
       !categoryId ||
       !point
     ) {
@@ -1544,7 +1665,25 @@ export function App({ runtime }: AppProps) {
       return undefined;
     }
 
-    const bookmarkId = String(event.over.id);
+    const targetId = String(event.over.id);
+    if (overData.type === "group") {
+      clearBookmarkGroupHover();
+      const intent = resolveBookmarkDropIntent(event.over.rect, point, {
+        canCreateGroup: true,
+        centerHoverMs: BOOKMARK_GROUP_DWELL_MS,
+      });
+      const next: BookmarkDropPreview = {
+        targetId,
+        targetType: "group",
+        categoryId,
+        groupId: targetId,
+        intent,
+      };
+      applyBookmarkDropPreview(next);
+      return next;
+    }
+
+    const bookmarkId = targetId;
     const groupId =
       typeof overData.groupId === "string" ? overData.groupId : undefined;
     const canCreateGroup =
@@ -1564,7 +1703,8 @@ export function App({ runtime }: AppProps) {
             const currentPreview = bookmarkDropPreviewRef.current;
             if (
               currentHover?.bookmarkId === bookmarkId &&
-              currentPreview?.bookmarkId === bookmarkId &&
+              currentPreview?.targetId === bookmarkId &&
+              currentPreview.targetType === "bookmark" &&
               !currentPreview.groupId
             ) {
               applyBookmarkDropPreview({
@@ -1587,13 +1727,26 @@ export function App({ runtime }: AppProps) {
           ? now - hover.startedAt
           : 0,
     });
-    const next = { bookmarkId, categoryId, groupId, intent };
+    const next: BookmarkDropPreview = {
+      targetId: bookmarkId,
+      targetType: "bookmark",
+      categoryId,
+      groupId,
+      intent,
+    };
     applyBookmarkDropPreview(next);
     return next;
   }
 
   function handleDragStart(event: DragStartEvent) {
     resetBookmarkDropState();
+    if (event.active.data.current?.type === "group") {
+      const group = workspace!.categories
+        .flatMap((category) => category.groups)
+        .find((item) => item.id === String(event.active.id));
+      setDraggedGroup(group);
+      return;
+    }
     if (event.active.data.current?.type !== "bookmark") return;
     const bookmark = bookmarkMap.get(String(event.active.id));
     draggedBookmarkRef.current = bookmark;
@@ -1609,6 +1762,7 @@ export function App({ runtime }: AppProps) {
     if (
       !event.over ||
       (event.active.data.current?.type !== "bookmark" &&
+        event.active.data.current?.type !== "group" &&
         !draggedBookmarkRef.current)
     ) {
       return;
@@ -1634,6 +1788,7 @@ export function App({ runtime }: AppProps) {
       : undefined;
     draggedBookmarkRef.current = undefined;
     setDraggedBookmark(undefined);
+    setDraggedGroup(undefined);
     resetBookmarkDropState();
     if (!event.over || event.active.id === event.over.id) return;
     const activeData = event.active.data.current;
@@ -1650,19 +1805,38 @@ export function App({ runtime }: AppProps) {
       });
       return;
     }
-    if (activeData?.type === "group" && overData?.type === "group") {
+    if (activeData?.type === "group") {
       updateWorkspace((next) => {
-        const category = next.categories.find(
-          (item) => item.id === activeData.categoryId,
+        let targetCategoryId: string | undefined;
+        let overRootItemId: string | undefined;
+        if (overData?.type === "bookmark") {
+          targetCategoryId = overData.categoryId;
+          overRootItemId =
+            typeof overData.groupId === "string"
+              ? overData.groupId
+              : String(event.over!.id);
+        } else if (overData?.type === "group") {
+          targetCategoryId = overData.categoryId;
+          overRootItemId = String(event.over!.id);
+        } else if (overData?.type === "transfer-group") {
+          targetCategoryId = overData.categoryId;
+          overRootItemId = overData.groupId;
+        } else if (
+          overData?.type === "loose" ||
+          overData?.type === "transfer-loose"
+        ) {
+          targetCategoryId = overData.categoryId;
+        } else if (overData?.type === "category") {
+          targetCategoryId = String(event.over!.id);
+        }
+        if (!targetCategoryId) return;
+        moveGroupInWorkspace(
+          next,
+          String(event.active.id),
+          String(activeData.categoryId),
+          String(targetCategoryId),
+          overRootItemId ? String(overRootItemId) : undefined,
         );
-        if (!category || activeData.categoryId !== overData.categoryId) return;
-        const from = category.groups.findIndex(
-          (item) => item.id === event.active.id,
-        );
-        const to = category.groups.findIndex(
-          (item) => item.id === event.over!.id,
-        );
-        if (from >= 0 && to >= 0) category.groups = arrayMove(category.groups, from, to);
       });
       return;
     }
@@ -1671,7 +1845,8 @@ export function App({ runtime }: AppProps) {
     const createsGroup =
       overData?.type === "bookmark" &&
       !overData.groupId &&
-      finalDropPreview?.bookmarkId === String(event.over.id) &&
+      finalDropPreview?.targetType === "bookmark" &&
+      finalDropPreview.targetId === String(event.over.id) &&
       finalDropPreview.intent === "group";
     updateWorkspace((next) => {
       let targetCategoryId: string | undefined;
@@ -1699,7 +1874,8 @@ export function App({ runtime }: AppProps) {
             ? overData.groupId
             : undefined;
         const position =
-          finalDropPreview?.bookmarkId === targetBookmarkId &&
+          finalDropPreview?.targetType === "bookmark" &&
+          finalDropPreview.targetId === targetBookmarkId &&
           finalDropPreview.intent !== "group"
             ? finalDropPreview.intent
             : "after";
@@ -1725,6 +1901,26 @@ export function App({ runtime }: AppProps) {
           typeof overData.groupId === "string"
             ? overData.groupId
             : String(event.over!.id);
+        if (
+          overData.type === "group" &&
+          finalDropPreview?.targetType === "group" &&
+          finalDropPreview.targetId === String(event.over!.id) &&
+          finalDropPreview.intent !== "group"
+        ) {
+          const bookmarkId = dragBookmark?.id ?? String(event.active.id);
+          if (
+            moveBookmarkRelativeToRootItemInWorkspace(
+              next,
+              bookmarkId,
+              String(event.over!.id),
+              String(targetCategoryId),
+              finalDropPreview.intent,
+            )
+          ) {
+            lockBookmarkPlacement(next, bookmarkId, "manual");
+          }
+          return;
+        }
       } else if (
         overData?.type === "loose" ||
         overData?.type === "transfer-loose"
@@ -1913,6 +2109,7 @@ export function App({ runtime }: AppProps) {
         onDragCancel={() => {
           draggedBookmarkRef.current = undefined;
           setDraggedBookmark(undefined);
+          setDraggedGroup(undefined);
           resetBookmarkDropState();
         }}
       >
@@ -2105,10 +2302,10 @@ export function App({ runtime }: AppProps) {
             />
           )}
 
-          {settings.widgets.enabled && (
-          <WidgetDashboard
-            preferences={settings.widgets}
-            healthPreferences={settings.bookmarkHealth}
+          {showWidgetHome && (
+            <WidgetDashboard
+              preferences={settings.widgets}
+              healthPreferences={settings.bookmarkHealth}
               now={now}
               bookmarks={bookmarks}
               workspace={workspace}
@@ -2118,79 +2315,83 @@ export function App({ runtime }: AppProps) {
               onOpenBookmark={(url) =>
                 void runtime.openUrl(url, settings.openInNewTab)
               }
-            onManage={() => {
-              setSettingsInitialSection("widgets");
-              setSettingsOpen(true);
-            }}
-            onOpenHealth={() => {
-              setSettingsInitialSection("health");
-              setSettingsOpen(true);
-            }}
-          />
+              onManage={() => {
+                setSettingsInitialSection("widgets");
+                setSettingsOpen(true);
+              }}
+              onOpenHealth={() => {
+                setSettingsInitialSection("health");
+                setSettingsOpen(true);
+              }}
+            />
           )}
 
-          <div
-            className="category-stack"
-            aria-label={`${activeCategory.title}大分类`}
-          >
-            <section
-              className="category-content active"
-              data-category-section
-              data-category-id={activeCategory.id}
-              aria-label={activeCategory.title}
-              key={activeCategory.id}
+          {!showWidgetHome && activeCategory && (
+            <div
+              className="category-stack"
+              aria-label={`${activeCategory.title}大分类`}
             >
-              <CategoryWorkspace
-                category={activeCategory}
-                dropPreview={bookmarkDropPreview}
-                bookmarkMap={bookmarkMap}
-                runtime={runtime}
-                highlightIds={highlightIds}
-                onAddLoose={() =>
-                  setBookmarkModal({
-                    categoryId: activeCategory.id,
-                  })
-                }
-                onAddToGroup={(group) =>
-                  setBookmarkModal({
-                    categoryId: activeCategory.id,
-                    groupId: group.id,
-                  })
-                }
-                onOpenGroup={(group) =>
-                  setExpandedGroup({
-                    categoryId: activeCategory.id,
-                    groupId: group.id,
-                  })
-                }
-                onEditGroup={(group) =>
-                  setTextModal({
-                    kind: "rename-group",
-                    initialValue: group.title,
-                    categoryId: activeCategory.id,
-                    groupId: group.id,
-                  })
-                }
-                onDeleteGroup={(group) => deleteGroup(activeCategory.id, group)}
-                onOpen={(bookmark, newTab) =>
-                  void runtime.openUrl(
-                    bookmark.url,
-                    newTab || settings.openInNewTab,
-                  )
-                }
-                onContext={(event, bookmark, groupId) => {
-                  event.preventDefault();
-                  setContext({
-                    bookmark,
-                    x: event.clientX,
-                    y: event.clientY,
-                    categoryId: activeCategory.id,
-                    groupId,
-                  });
-                }}
-              />
-            </section>
-          </div>
+              <section
+                className="category-content active"
+                data-category-section
+                data-category-id={activeCategory.id}
+                aria-label={activeCategory.title}
+                key={activeCategory.id}
+              >
+                <CategoryWorkspace
+                  category={activeCategory}
+                  dropPreview={bookmarkDropPreview}
+                  bookmarkMap={bookmarkMap}
+                  runtime={runtime}
+                  highlightIds={highlightIds}
+                  onAddLoose={() =>
+                    setBookmarkModal({
+                      categoryId: activeCategory.id,
+                    })
+                  }
+                  onAddToGroup={(group) =>
+                    setBookmarkModal({
+                      categoryId: activeCategory.id,
+                      groupId: group.id,
+                    })
+                  }
+                  onOpenGroup={(group) =>
+                    setExpandedGroup({
+                      categoryId: activeCategory.id,
+                      groupId: group.id,
+                    })
+                  }
+                  onEditGroup={(group) =>
+                    setTextModal({
+                      kind: "rename-group",
+                      initialValue: group.title,
+                      categoryId: activeCategory.id,
+                      groupId: group.id,
+                    })
+                  }
+                  onDeleteGroup={(group) =>
+                    deleteGroup(activeCategory.id, group)
+                  }
+                  onOpen={(bookmark, newTab) =>
+                    void runtime.openUrl(
+                      bookmark.url,
+                      newTab || settings.openInNewTab,
+                    )
+                  }
+                  onContext={(event, bookmark, groupId) => {
+                    event.preventDefault();
+                    setContext({
+                      bookmark,
+                      x: event.clientX,
+                      y: event.clientY,
+                      categoryId: activeCategory.id,
+                      groupId,
+                    });
+                  }}
+                />
+              </section>
+            </div>
+          )}
         </div>
       </section>
 
@@ -2247,7 +2448,7 @@ export function App({ runtime }: AppProps) {
       })()}
 
       <SortableContext
-        items={workspace.categories.map((category) => category.id)}
+        items={visibleCategories.map((category) => category.id)}
         strategy={verticalListSortingStrategy}
       >
         <div
@@ -2255,12 +2456,45 @@ export function App({ runtime }: AppProps) {
           onMouseLeave={() => setCategoryHoverLabel(undefined)}
         >
           <nav className="category-rail" aria-label={t("大分类")}>
+            {settings.widgets.enabled && (
+              <>
+                <button
+                  type="button"
+                  className={`rail-category rail-widget-home${showWidgetHome ? " active" : ""}`}
+                  data-widget-home
+                  aria-current={showWidgetHome ? "true" : undefined}
+                  aria-label={t("小部件中心")}
+                  onClick={showWidgetsHome}
+                  onMouseEnter={(event) => {
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setCategoryHoverLabel({
+                      title: t("小部件中心"),
+                      top: bounds.top + bounds.height / 2,
+                      right: window.innerWidth - bounds.left + 10,
+                    });
+                  }}
+                  onMouseLeave={() => setCategoryHoverLabel(undefined)}
+                  onFocus={(event) => {
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setCategoryHoverLabel({
+                      title: t("小部件中心"),
+                      top: bounds.top + bounds.height / 2,
+                      right: window.innerWidth - bounds.left + 10,
+                    });
+                  }}
+                  onBlur={() => setCategoryHoverLabel(undefined)}
+                >
+                  <SquaresFour size={25} weight="light" />
+                </button>
+                <span className="rail-widget-divider" />
+              </>
+            )}
             <div className="rail-categories">
-              {workspace.categories.map((category) => (
+              {visibleCategories.map((category) => (
                 <SortableCategory
                   key={category.id}
                   category={category}
-                  active={category.id === activeCategory.id}
+                  active={!showWidgetHome && category.id === activeCategoryId}
                   onClick={() => scrollToCategory(category.id)}
                   onHover={setCategoryHoverLabel}
                   onContext={(event) => {
@@ -2318,6 +2552,34 @@ export function App({ runtime }: AppProps) {
               source={runtime.faviconUrl(draggedBookmark)}
             />
             <span className="bookmark-title">{draggedBookmark.title}</span>
+          </div>
+        ) : draggedGroup ? (
+          <div className="group-tile-wrap group-drag-overlay">
+            <div className="group-tile">
+              <span
+                className={`group-preview group-preview-${Math.max(1, Math.min(4, draggedGroup.bookmarkIds.length))}`}
+                aria-hidden="true"
+              >
+                {draggedGroup.bookmarkIds.length > 0 ? (
+                  draggedGroup.bookmarkIds.slice(0, 4).map((bookmarkId) => {
+                    const bookmark = bookmarkMap.get(bookmarkId);
+                    return bookmark ? (
+                      <BookmarkIcon
+                        key={bookmark.id}
+                        bookmark={bookmark}
+                        source={runtime.faviconUrl(bookmark)}
+                      />
+                    ) : null;
+                  })
+                ) : (
+                  <FolderOpen size={34} weight="duotone" />
+                )}
+                <span className="group-count">
+                  {draggedGroup.bookmarkIds.length}
+                </span>
+              </span>
+              <span className="bookmark-title">{draggedGroup.title}</span>
+            </div>
           </div>
         ) : null}
       </DragOverlay>
@@ -2690,17 +2952,12 @@ function CategoryWorkspace({
   onContext,
 }: CategoryWorkspaceProps) {
   const { t } = useI18n();
-  const looseItems = (category.bookmarkIds ?? [])
-    .map((id) => bookmarkMap.get(id))
-    .filter((item): item is BookmarkRecord => Boolean(item));
   const { setNodeRef, isOver } = useDroppable({
     id: `loose-${category.id}`,
     data: { type: "loose", categoryId: category.id },
   });
-  const placementIds = [
-    ...(category.bookmarkIds ?? []),
-    ...category.groups.map((group) => group.id),
-  ];
+  const placementIds = getCategoryRootOrder(category);
+  const groupsById = new Map(category.groups.map((group) => [group.id, group]));
 
   return (
     <section
@@ -2710,35 +2967,49 @@ function CategoryWorkspace({
     >
       <SortableContext items={placementIds} strategy={rectSortingStrategy}>
         <div className="bookmark-grid category-item-grid">
-          {looseItems.map((bookmark) => (
-            <SortableBookmark
-              key={bookmark.id}
-              bookmark={bookmark}
-              categoryId={category.id}
-              dropIntent={
-                dropPreview?.bookmarkId === bookmark.id
-                  ? dropPreview.intent
-                  : undefined
-              }
-              favicon={runtime.faviconUrl(bookmark)}
-              highlighted={highlightIds.includes(bookmark.id)}
-              onOpen={onOpen}
-              onContext={(event, item) => onContext(event, item)}
-            />
-          ))}
-          {category.groups.map((group) => (
-            <SortableGroup
-              key={group.id}
-              group={group}
-              categoryId={category.id}
-              bookmarkMap={bookmarkMap}
-              runtime={runtime}
-              onOpen={() => onOpenGroup(group)}
-              onAdd={() => onAddToGroup(group)}
-              onEditGroup={() => onEditGroup(group)}
-              onDeleteGroup={() => onDeleteGroup(group)}
-            />
-          ))}
+          {placementIds.map((itemId) => {
+            const group = groupsById.get(itemId);
+            if (group) {
+              return (
+                <SortableGroup
+                  key={group.id}
+                  group={group}
+                  categoryId={category.id}
+                  bookmarkMap={bookmarkMap}
+                  runtime={runtime}
+                  dropIntent={
+                    dropPreview?.targetType === "group" &&
+                    dropPreview.targetId === group.id
+                      ? dropPreview.intent
+                      : undefined
+                  }
+                  onOpen={() => onOpenGroup(group)}
+                  onAdd={() => onAddToGroup(group)}
+                  onEditGroup={() => onEditGroup(group)}
+                  onDeleteGroup={() => onDeleteGroup(group)}
+                />
+              );
+            }
+            const bookmark = bookmarkMap.get(itemId);
+            if (!bookmark) return null;
+            return (
+              <SortableBookmark
+                key={bookmark.id}
+                bookmark={bookmark}
+                categoryId={category.id}
+                dropIntent={
+                  dropPreview?.targetType === "bookmark" &&
+                  dropPreview.targetId === bookmark.id
+                    ? dropPreview.intent
+                    : undefined
+                }
+                favicon={runtime.faviconUrl(bookmark)}
+                highlighted={highlightIds.includes(bookmark.id)}
+                onOpen={onOpen}
+                onContext={(event, item) => onContext(event, item)}
+              />
+            );
+          })}
           <button
             className="bookmark-tile add-bookmark-tile"
             onClick={onAddLoose}
@@ -2760,6 +3031,7 @@ interface SortableGroupProps {
   categoryId: string;
   bookmarkMap: Map<string, BookmarkRecord>;
   runtime: AppRuntime;
+  dropIntent?: BookmarkDropIntent;
   onOpen(): void;
   onAdd(): void;
   onEditGroup(): void;
@@ -2771,12 +3043,21 @@ function SortableGroup({
   categoryId,
   bookmarkMap,
   runtime,
+  dropIntent,
   onOpen,
   onAdd,
   onEditGroup,
   onDeleteGroup,
 }: SortableGroupProps) {
-  const { setNodeRef, transform, transition, isDragging, isOver } =
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } =
     useSortable({
       id: group.id,
       data: { type: "group", categoryId, groupId: group.id },
@@ -2819,12 +3100,14 @@ function SortableGroup({
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`group-tile-wrap${isDragging ? " dragging" : ""}${isOver ? " drop-active" : ""}`}
+      className={`group-tile-wrap${isDragging ? " dragging" : ""}${isOver ? " drop-active" : ""}${dropIntent ? ` drop-${dropIntent}` : ""}`}
       aria-label={`${group.title}分组`}
       data-group-id={group.id}
     >
       <button
         className="group-tile"
+        {...attributes}
+        {...listeners}
         onClick={onOpen}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -2993,7 +3276,8 @@ function GroupDetailOverlay({
                 categoryId={category.id}
                 groupId={group.id}
                 dropIntent={
-                  dropPreview?.bookmarkId === bookmark.id
+                  dropPreview?.targetType === "bookmark" &&
+                  dropPreview.targetId === bookmark.id
                     ? dropPreview.intent
                     : undefined
                 }
@@ -3851,20 +4135,37 @@ function CategoryEditorForm({
       </label>
       <fieldset className="category-icon-fieldset">
         <legend>{t("选择图标")}</legend>
-        <div className="category-icon-picker" role="radiogroup">
-          {CATEGORY_ICON_OPTIONS.map((option) => (
-            <button
-              type="button"
-              key={option.value}
-              className={icon === option.value ? "is-selected" : ""}
-              onClick={() => setIcon(option.value)}
-              role="radio"
-              aria-checked={icon === option.value}
-              title={option.label}
+        <div className="category-icon-picker-scroll" role="radiogroup">
+          {CATEGORY_ICON_GROUPS.map((group) => (
+            <section
+              className="category-icon-group"
+              key={group}
+              aria-label={group}
             >
-              <CategoryGlyph name={option.value} size={22} weight="light" />
-              <span>{option.label}</span>
-            </button>
+              <h4>{group}</h4>
+              <div className="category-icon-picker">
+                {CATEGORY_ICON_OPTIONS.filter(
+                  (option) => option.group === group,
+                ).map((option) => (
+                  <button
+                    type="button"
+                    key={option.value}
+                    className={icon === option.value ? "is-selected" : ""}
+                    onClick={() => setIcon(option.value)}
+                    role="radio"
+                    aria-checked={icon === option.value}
+                    title={option.label}
+                  >
+                    <CategoryGlyph
+                      name={option.value}
+                      size={22}
+                      weight="light"
+                    />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </fieldset>

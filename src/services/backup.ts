@@ -4,7 +4,7 @@ import type {
   BookmarkRecord,
   WorkspaceLayout,
 } from "@/domain/types";
-import { LAYOUT_VERSION } from "@/domain/types";
+import { CATEGORY_ICON_VALUES, LAYOUT_VERSION } from "@/domain/types";
 import { DEFAULT_SETTINGS } from "@/domain/constants";
 import { normalizeBookmarkHealthPreferences } from "@/domain/bookmarkHealth";
 import { normalizeScreenDisplayPreferences } from "@/domain/timeDisplay";
@@ -77,28 +77,7 @@ const workspaceSchema = z.object({
       z.object({
         id: z.string().max(500),
         title: z.string().max(2_000),
-        icon: z.enum([
-          "briefcase",
-          "bookmark",
-          "layers",
-          "study",
-          "heart",
-          "globe",
-          "code",
-          "chart",
-          "palette",
-          "book",
-          "home",
-          "news",
-          "tools",
-          "shopping",
-          "travel",
-          "music",
-          "video",
-          "community",
-          "idea",
-          "archive",
-        ]),
+        icon: z.enum(CATEGORY_ICON_VALUES),
         bookmarkIds: z
           .array(z.string().max(500))
           .max(200_000)
@@ -114,6 +93,10 @@ const workspaceSchema = z.object({
             }),
           )
           .max(10_000),
+        rootOrder: z
+          .array(z.string().max(500))
+          .max(210_000)
+          .optional(),
       }),
     )
     .min(1)
@@ -175,6 +158,7 @@ const settingsSchema = z.object({
       showTime: z.boolean().optional(),
       showDailyQuote: z.boolean().optional(),
       alwaysShowCategoryRail: z.boolean().optional(),
+      showEmptyUncategorizedCategory: z.boolean().optional(),
       timeStyle: z
         .enum([
           "minimal",
@@ -472,6 +456,7 @@ function remapLayout(
     .map((id) => idMap.get(id))
     .filter((id): id is string => Boolean(id));
   for (const category of layout.categories) {
+    const groupIds = new Set(category.groups.map((group) => group.id));
     category.bookmarkIds = unique(
       (category.bookmarkIds ?? [])
         .map((id) => idMap.get(id))
@@ -484,6 +469,11 @@ function remapLayout(
           .filter((id): id is string => Boolean(id)),
       );
     }
+    category.rootOrder = unique(
+      (category.rootOrder ?? [])
+        .map((id) => (groupIds.has(id) ? id : idMap.get(id)))
+        .filter((id): id is string => Boolean(id)),
+    );
   }
   layout.updatedAt = Date.now();
   return layout;

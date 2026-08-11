@@ -148,6 +148,34 @@ describe("AI tagging task limit control", () => {
     );
   });
 
+  it("saves whether an empty unclassified category stays visible", async () => {
+    const onSave = vi.fn(async () => true);
+    render(
+      createElement(SettingsPanel, {
+        ...settingsPanelProps(),
+        initialSection: "general",
+        onSave,
+      }),
+    );
+
+    const toggle = screen.getByRole("checkbox", {
+      name: /显示空的“未分类”分类/,
+    });
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          screenDisplay: expect.objectContaining({
+            showEmptyUncategorizedCategory: false,
+          }),
+        }),
+      ),
+    );
+  });
+
   it("starts with 10 unprocessed bookmarks and keeps full quantity explicit", () => {
     const onStartTagging = vi.fn(async () => undefined);
     render(

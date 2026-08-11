@@ -14,6 +14,12 @@
   <img src="https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4" alt="Chrome Manifest V3">
 </p>
 
+<p align="center">
+  <a href="https://smartainewtab.online">官方网站</a> ·
+  <a href="https://github.com/zuogl/SmartAINewTab">源代码仓库</a> ·
+  Chrome Web Store 审核中
+</p>
+
 SmartAINewTab 使用 Chrome 原生书签作为数据源，在新标签页中提供分类、分组、图标网格、
 统一搜索、AI 整理和书签体检。没有 AI Key、没有云账户时，书签展示、管理和本地搜索仍然
 可以正常使用。
@@ -84,7 +90,7 @@ npm run build
 4. 选择项目中的 `.output/chrome-mv3` 目录；
 5. 打开一个新标签页。
 
-> 从源码构建的扩展与未来可能发布的商店版本是独立安装实例，本地数据不会自动共享。
+> 从源码构建的扩展与已经提交审核的 Chrome Web Store 版本是独立安装实例，本地数据不会自动共享。商店审核通过并公开上架前，请勿把源码安装视为商店安装。
 
 ## 本地开发
 
@@ -96,7 +102,28 @@ npm run dev
 
 # 在 WXT 扩展开发环境中运行
 npm run dev:extension
+
+# 完整检查并生成固定开发 ID 的本地可加载版本
+npm run release:local
 ```
+
+版本分为两条相互独立的线：`package.json` 保存 Chrome Web Store 三段正式版本，例如
+`0.0.6`；`development-build.json` 保存自动递增的开发构建号。本地发布 manifest 会显示
+`0.0.6.1` / `0.0.6-dev.1`，但不会消耗或改写正式版本号。
+
+日常开发包固定使用 ID `akbemgeeppcdocpjimlkbhfoambjigej`。如需验证生产 ID
+`hdajgpnnncgdddpjbdggaochnbgpfngl` 的 OAuth、来源白名单或回调地址，请从 Chrome Web
+Store Developer Dashboard 的 **Package → View public key** 复制公钥，保存到被 Git 忽略的
+`config/production-extension-public-key.txt`，再运行：
+
+```bash
+npm run release:production-id
+```
+
+该命令会先由公钥计算并强制核对生产 ID，再把产物写入独立的
+`release/SmartAINewTab-production-id-qa-extension`。请仅在不安装商店版的独立 Chrome
+Profile 中加载，避免测试代码接触正式扩展的本地数据。公钥可以用于 ID 校验；任何私钥、
+签名密钥或 OAuth Secret 都不得放入项目。
 
 提交改动前运行完整检查：
 
@@ -104,7 +131,8 @@ npm run dev:extension
 npm run check
 ```
 
-该命令会检查公开仓库边界、背景素材、第三方许可证、TypeScript、测试和 Chrome MV3 构建。
+该命令会检查公开仓库边界、背景素材、第三方许可证、版本配置、TypeScript、测试和 Chrome
+MV3 构建。
 更多开发约定见[贡献指南](CONTRIBUTING.md)。
 
 ## 可选 AI Provider

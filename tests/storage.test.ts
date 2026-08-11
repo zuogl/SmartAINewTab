@@ -123,6 +123,7 @@ describe("cloud endpoint defaults", () => {
         showTime: false,
         showDailyQuote: false,
         alwaysShowCategoryRail: true,
+        showEmptyUncategorizedCategory: true,
         timeStyle: "serif",
         showDate: true,
         showWeekday: true,

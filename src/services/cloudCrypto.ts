@@ -76,7 +76,12 @@ export async function decryptCloudBackup(
   recoveryPassword: string,
 ): Promise<{ backup: BackupDocument; vaultKey: string; keyEnvelope: WrappedVaultKey }> {
   if (!recoveryPassword) throw new Error("请输入恢复密码");
-  const ciphertextBytes = base64UrlToBytes(vault.ciphertext);
+  let ciphertextBytes: Uint8Array;
+  try {
+    ciphertextBytes = base64UrlToBytes(vault.ciphertext);
+  } catch {
+    throw new Error("云端备份完整性校验失败");
+  }
   if (vault.checksumKind === CIPHERTEXT_CHECKSUM_KIND) {
     const checksum = await crypto.subtle.digest(
       "SHA-256",
