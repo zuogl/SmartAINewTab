@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     showTime: true,
     showDailyQuote: true,
     alwaysShowCategoryRail: true,
+    showEmptyUncategorizedCategory: true,
     timeStyle: "minimal",
     showDate: true,
     showWeekday: true,

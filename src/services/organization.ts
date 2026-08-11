@@ -7,6 +7,7 @@ import type {
 import {
   createUncategorizedCategory,
   ensureUncategorizedCategory,
+  syncWorkspaceRootOrders,
   UNCATEGORIZED_TITLE,
 } from "@/domain/layout";
 import {
@@ -132,12 +133,14 @@ export function buildAiOrganizedWorkspace(
       (category) => category.title === previousActiveTitle,
     )?.id ?? categoriesWithUniqueIcons[0]!.id;
 
-  return {
+  const workspace = {
     ...structuredClone(current),
     activeCategoryId,
     categories: categoriesWithUniqueIcons,
     updatedAt: Date.now(),
   };
+  syncWorkspaceRootOrders(workspace);
+  return workspace;
 }
 
 export function placeBookmarkInAiWorkspace(
@@ -286,6 +289,7 @@ function removeBookmark(workspace: WorkspaceLayout, bookmarkId: string): void {
 
 function finish(workspace: WorkspaceLayout): WorkspaceLayout {
   workspace.categories = ensureUniqueCategoryIcons(workspace.categories);
+  syncWorkspaceRootOrders(workspace);
   workspace.updatedAt = Date.now();
   return workspace;
 }

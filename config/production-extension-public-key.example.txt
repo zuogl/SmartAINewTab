@@ -1,0 +1,2 @@
+Paste the public key from Chrome Web Store Developer Dashboard > Package > View public key here.
+Keep only the public key. Never place a private signing key in this file.

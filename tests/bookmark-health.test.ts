@@ -34,6 +34,7 @@ function redirectAt(status: number, location: string): Response {
 describe("bookmark health and duplicate detection", () => {
   beforeEach(async () => {
     localStorage.clear();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await Promise.all([
       database.health.clear(),
@@ -382,6 +383,79 @@ describe("bookmark health and duplicate detection", () => {
       processed: 2,
     });
     expect(await database.health.count()).toBe(2);
+  });
+
+  it("classifies internal browser URLs as unsupported and continues the durable queue", async () => {
+    const contains = vi.fn().mockResolvedValue(true);
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const fetcher = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("chrome", {
+      runtime: { id: "test-extension", sendMessage },
+      permissions: { contains },
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const job = await enqueueBookmarkHealthJob(
+      [
+        bookmark("before", "https://before.example.com"),
+        bookmark("new-tab", "chrome://newtab/"),
+        bookmark("after", "https://after.example.com"),
+      ],
+      "all",
+      "all",
+    );
+
+    expect(await runNextBookmarkHealthJob()).toBe(true);
+    expect(await runNextBookmarkHealthJob()).toBe(true);
+    expect(await runNextBookmarkHealthJob()).toBe(false);
+
+    expect(await database.healthJobs.get(job!.id)).toMatchObject({
+      status: "completed",
+      processed: 3,
+      failed: 0,
+    });
+    expect(await database.health.get("new-tab")).toMatchObject({
+      status: "unsupported",
+      checkedUrl: "chrome://newtab/",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(contains).toHaveBeenCalledTimes(2);
+  });
+
+  it("pauses without consuming the current item when web host access is lost", async () => {
+    const contains = vi.fn().mockResolvedValue(false);
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const fetcher = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("chrome", {
+      runtime: { id: "test-extension", sendMessage },
+      permissions: { contains },
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const job = await enqueueBookmarkHealthJob(
+      [bookmark("permission", "https://permission.example.com")],
+      "all",
+      "all",
+    );
+
+    expect(await runNextBookmarkHealthJob()).toBe(false);
+    expect(await database.healthJobs.get(job!.id)).toMatchObject({
+      status: "paused",
+      pauseReason: "host-permission",
+      processed: 0,
+      failed: 0,
+      items: [expect.objectContaining({ status: "queued" })],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    contains.mockResolvedValue(true);
+    await resumeBookmarkHealthJob(job!.id);
+    expect(await runNextBookmarkHealthJob()).toBe(false);
+    expect(await database.healthJobs.get(job!.id)).toMatchObject({
+      status: "completed",
+      processed: 1,
+      failed: 0,
+    });
   });
 
   it("atomically clears previous results when a new full scan starts", async () => {

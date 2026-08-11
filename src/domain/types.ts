@@ -1,27 +1,71 @@
 export const LAYOUT_VERSION = 3;
 
 export type BookmarkSource = "chrome" | "custom" | "preview";
-export type CategoryIcon =
-  | "briefcase"
-  | "bookmark"
-  | "layers"
-  | "study"
-  | "heart"
-  | "globe"
-  | "code"
-  | "chart"
-  | "palette"
-  | "book"
-  | "home"
-  | "news"
-  | "tools"
-  | "shopping"
-  | "travel"
-  | "music"
-  | "video"
-  | "community"
-  | "idea"
-  | "archive";
+export const CATEGORY_ICON_VALUES = [
+  "briefcase",
+  "bookmark",
+  "layers",
+  "study",
+  "heart",
+  "globe",
+  "code",
+  "chart",
+  "palette",
+  "book",
+  "home",
+  "news",
+  "tools",
+  "shopping",
+  "travel",
+  "music",
+  "video",
+  "community",
+  "idea",
+  "archive",
+  "folder",
+  "tag",
+  "star",
+  "checklist",
+  "terminal",
+  "database",
+  "cloud",
+  "cpu",
+  "git",
+  "bug",
+  "robot",
+  "magic",
+  "circuitry",
+  "rocket",
+  "notebook",
+  "certificate",
+  "science",
+  "translate",
+  "image",
+  "camera",
+  "pen",
+  "typography",
+  "bars",
+  "trend",
+  "marketing",
+  "target",
+  "funnel",
+  "bank",
+  "currency",
+  "credit-card",
+  "wallet",
+  "storefront",
+  "health",
+  "fitness",
+  "game",
+  "headphones",
+  "map",
+  "compass",
+  "location",
+  "article",
+  "chat",
+] as const;
+
+export type CategoryIcon = (typeof CATEGORY_ICON_VALUES)[number];
 
 export interface BookmarkRecord {
   id: string;
@@ -51,6 +95,11 @@ export interface BookmarkCategory {
   icon: CategoryIcon;
   bookmarkIds: string[];
   groups: BookmarkGroup[];
+  /**
+   * Visual order of loose bookmarks and groups at the category root.
+   * Missing legacy values are normalized from bookmarkIds followed by groups.
+   */
+  rootOrder?: string[];
 }
 
 export interface WorkspaceLayout {
@@ -134,6 +183,7 @@ export interface ScreenDisplayPreferences {
   showTime: boolean;
   showDailyQuote: boolean;
   alwaysShowCategoryRail: boolean;
+  showEmptyUncategorizedCategory: boolean;
   timeStyle: TimeStyle;
   showDate: boolean;
   showWeekday: boolean;
@@ -292,6 +342,7 @@ export interface BookmarkHealthRequestLog {
 export interface BookmarkHealthJob {
   id: string;
   status: BookmarkHealthJobStatus;
+  pauseReason?: "user" | "host-permission";
   scope: BookmarkHealthScanScope;
   bookmarkIds: string[];
   processed: number;
